@@ -1,2 +1,2 @@
-# RUVseq_PanKbase
+# PanKbase RUVseq
 RUVseq pipeline for PanKbase

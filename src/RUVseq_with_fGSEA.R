@@ -1,3 +1,5 @@
+##Pipeline adapted from: https://github.com/PanKbase/PanKbase-DEG-analysis/tree/main
+
 suppressMessages(library(Seurat))
 suppressMessages(library(stringr))
 suppressMessages(library(parallel))
@@ -95,7 +97,6 @@ fdr <- 0.05
 data <- readRDS("/tscc/nfs/home/lebrusman/Gaulton_lab/data/ADA_object/250424_ADA_object_metadata_v3_3.rds")
 print(data)
 
-outdir <- outdir
 
 fdr <- 0.05
 
@@ -233,21 +234,22 @@ meta_in_sc$only.aab.znt8 <- ifelse(meta_in_sc$aab_gada == "FALSE" & meta_in_sc$a
                                   meta_in_sc$aab_iaa == "FALSE" & meta_in_sc$aab_znt8 == "TRUE", "TRUE", "FALSE")
 
 
+cell.types <- c("Beta", "ActiveStellate", "CyclingAlpha", "Delta", "Endothelial", 
+                "Gamma+Epsilon", "Immune(Macrophages)", "MUC5B+Ductal", "QuiescentStellate", 
+                "Alpha", "Acinar", "Ductal")
+cell.types <- cell.types[order(cell.types)]
 
-# for (cell.type in c("Acinar", "ActiveStellate", "CyclingAlpha", "Delta", "Endothelial", "Gamma+Epsilon", 
-#                     "Immune(Macrophages)", "MUC5B+Ductal", "QuiescentStellate", "Alpha", "Beta", "Ductal")) {
-#     cell.prop <- data.frame(table(data@meta.data[data@meta.data$coarse_annot == cell.type, "samples"]))
-#     write.table(cell.prop, paste0(outdir, "cell_props/", "cell.prop_", cell.type, ".txt"),
-#                 quote = F, sep = "\t", row.names = F)
+for (cell.type in cell.types) {
+    cell.prop <- data.frame(table(data@meta.data[data@meta.data$coarse_annot == cell.type, "samples"]))
+    write.table(cell.prop, paste0(outdir, "cell_props/cell.prop_", cell.type, ".txt"),
+                quote = F, sep = "\t", row.names = F)
 
-
-# }
+}
 
 if (contrast_id == "ND_vs_T1D") {
     write.table(meta_in_sc, paste0(outdir, "meta_in_sc_250923.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
 
 }
-# quit()
 
 # meta_in_sc <- read.table(paste0(outdir, "meta_in_sc_250916.tsv"), header = TRUE)
 
@@ -257,16 +259,11 @@ metadata <- metadata[metadata$treatments == "no_treatment",]
 
 
 # Now let's do the DE analysis - loop through all celltypes
-cell.types <- c("Beta", "ActiveStellate", "CyclingAlpha", "Delta", "Endothelial", 
-            "Gamma+Epsilon", "Immune(Macrophages)", "MUC5B+Ductal", "QuiescentStellate", 
-            "Alpha", "Acinar", "Ductal")
-cell.types <- cell.types[order(cell.types)]
+
 ncells <- 20
 minreads <- 10
 minprop <- 0.25
 nlatent.base <- 10
-
-input_dir <- "/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/outputs/250903_outs/pseudobulk_counts/"
 
 
 de_stats <- data.frame()
@@ -274,7 +271,7 @@ for (cell.type in cell.types) {
     print(cell.type)
     pdf(paste0(outdir, cell.type, "_", contrast_id, "_all_plots.pdf"))
 
-    cell.prop <- read.table(paste0("/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/outputs/250903_outs/cell_props/cell.prop_", cell.type, ".txt"), header = T) # cell counts and proportions in large map
+    cell.prop <- read.table(paste0(outdir, "cell_props/cell.prop_", cell.type, ".txt"), header = T) # cell counts and proportions in large map
     metadata <- meta_in_sc
     metadata <- metadata[metadata$treatments == "no_treatment",]
     
@@ -357,8 +354,7 @@ for (cell.type in cell.types) {
     coldata <- data.frame(coldata)
     rownames(coldata) <- coldata$samples
 
-    dir <- '/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/outputs/250903_outs/pseudobulk_counts/'
-    raw_mat <- read.table(paste0(dir, cell.type, "_sample_gex_total_counts.txt"), header = T)
+    raw_mat <- read.table(paste0(indir, cell.type, "_sample_gex_total_counts.txt"), header = T)
 
     coldata$samples <- gsub("-", ".", coldata$samples)
     tmp$Var1 <- gsub("-", ".", tmp$Var1)

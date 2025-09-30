@@ -1,5 +1,5 @@
 #make sure file can be read in properly
-input_vars="pankbase_new_contrasts_250923.csv"
+input_vars="pankbase_new_contrasts.csv"
 
 dos2unix "$input_vars" #change to unix
 
@@ -41,4 +41,4 @@ export metadata
 sleep 2
 
 sbatch run_RUVseq_with_fGSEA.sh
-done < <(tail -n +2 pankbase_new_contrasts_250923.csv)
+done < <(tail -n +2 pankbase_new_contrasts.csv)

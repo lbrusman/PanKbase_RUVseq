@@ -138,9 +138,9 @@ Here are descriptions of each column:
 - `subset2`: the groups you would like to *keep* from the column in `subset_on2`. The groups must be underscore-separated.
 - `covariates`: names of columns (covariates) you would like to include in the differential expression formula. If more than one, must be underscore-separated.
 - `correlate_vars`: names of columns you would like to correlate with latent variables in a correlation matrix.
-- `scale`: do you want to scale numeric variables? Must be TRUE or FALSE.
+- `scale`: do you want to scale continuous variables? Must be TRUE or FALSE.
 - `file_pattern`: the file ending of all of your pseudobulk matrix files. This should include **everything** other than the cell type.
-- `assay`: must be either "RNA" or "ATAC" (no quotes). Pipeline will pick parameters accordingly.
+- `assay`: must be "RNA" (no quotes).
 
 ### Step 2:
 

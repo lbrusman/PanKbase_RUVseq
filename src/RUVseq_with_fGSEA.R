@@ -1,4 +1,4 @@
-##Pipeline adapted from: https://github.com/PanKbase/PanKbase-DEG-analysis/tree/main
+## Pipeline adapted from: https://github.com/PanKbase/PanKbase-DEG-analysis/tree/main
 
 suppressMessages(library(Seurat))
 suppressMessages(library(stringr))
@@ -96,9 +96,6 @@ fdr <- 0.05
 
 data <- readRDS("/tscc/nfs/home/lebrusman/Gaulton_lab/data/ADA_object/250424_ADA_object_metadata_v3_3.rds")
 print(data)
-
-
-fdr <- 0.05
 
 for (s in c("SRR27326986", "SRR27326987", "SRR27326992", "SRR27326993",
             "SRR27326994", "SRR27326995", "SRR27326996", "SRR27326997")) {
@@ -316,8 +313,7 @@ for (cell.type in cell.types) {
     }
     
     tmp <- cell.prop[cell.prop$Freq > ncells & 
-                     # cell.prop$diabetes_status_description %in% c("NonDiabetic", "T1DM") & #remove for other contrasts
-              cell.prop$Var1 %in% tmp$Var1,] #keep donor has a `diabetes_status_description` of `type 1 diabetes` or `non-diabetes`
+              cell.prop$Var1 %in% tmp$Var1,]
     print(paste("nrow tmp:", nrow(tmp)))
 
     
@@ -326,7 +322,7 @@ for (cell.type in cell.types) {
     coldata <- inner_join(coldata, tmp[,c("Var1", "aab")], by = c("samples" = "Var1"))
     coldata$aab <- as.factor(coldata$aab)
     
-    colnames(coldata) <- gsub("_", ".", colnames(coldata)) #may have to find a better place for this
+    colnames(coldata) <- gsub("_", ".", colnames(coldata))
 
     coldata <- coldata[!is.na(coldata[[contrast_var]]), ] #get rid of na values if need to
 
@@ -443,7 +439,6 @@ for (cell.type in cell.types) {
     celltype_norm_counts <- t(apply(raw_mat, 1, function(x) x/size.factors))
     celltype_norm_counts.log <- log2(celltype_norm_counts + 1) # add a pseudocount
 
-    # options(repr.plot.width = 12, repr.plot.height = 6, repr.plot.res = 300)
 
     #make plots to explore covariates
     ord_idx <- match(colnames(celltype_norm_counts.log), coldata$sample.id)
@@ -532,8 +527,6 @@ for (cell.type in cell.types) {
     #plot initial volcano plot - Liza
     base_design <- paste0("~", paste0(covariates_list, collapse = "+"), "+", contrast_var)
 
-                                    
-    # base_design <- "~ diabetes_status_description+sex+age+bmi+ethnicity"
     additional_covs <- c("chemistry")
 
     # Run this chunk on a SLURM job in case k is relatively large. When k = 30, it takes ~ 45 mins to run the analysis
@@ -563,7 +556,6 @@ for (cell.type in cell.types) {
             # extract results for the specified FDR threshold
             result <- DESeq2::results(dds, contrast = contrast_vec)
         }
-        # contrast_vec = c("diabetes_status_description", "T1DM", "NonDiabetic") # fold change = numerator / denominator
         else {
             print("var is numeric")
             celltype_de_explore <- run_many_designs_deseq_continuous(
@@ -630,7 +622,6 @@ for (cell.type in cell.types) {
             theme_bw() +
             theme(plot.title = element_text(size = 8))
     plot <- plot + ggrepel::geom_text_repel(data = topxs, aes(x = log2FoldChange, y = -log10(pvalue), label = geneid), size = 3)
-    # options(repr.plot.width = 6, repr.plot.height = 5, repr.plot.res = 300)
     print(plot)
 
     cat_vars <- c("sex", "diabetes.status.description", "ethnicity", "chemistry")
@@ -641,7 +632,6 @@ for (cell.type in cell.types) {
         n_subtract <- n_subtract + i_len
     }
     n_subtract <- n_subtract + length(cont_vars) + 1
-    # nlatent <- min(nlatent.base, nrow(coldata)-n_subtract)
     nlatent <- min(nlatent.base, nrow(coldata)-length(covariates_list)-3)
     print(paste("nlatent =", nlatent))
     if (nlatent <= 0) {
@@ -711,7 +701,7 @@ for (cell.type in cell.types) {
             dds,
             design = base_design,
             name = contrast_var,
-            k = min(nlatent, 10), #k at most is number of samples - 6 covariates in base model - 1 intercept
+            k = min(nlatent, 10), #k at most is number of samples - number covariates in base model - 1 intercept
             p.val.thresh = 0.5,
             method = "ruvg"
         )
@@ -805,7 +795,6 @@ for (cell.type in cell.types) {
 
     print(paste0("k_stop = ", k_stop))
     
-    # options(repr.plot.width = 6, repr.plot.height = 4, repr.plot.res = 300)
     #try to plot upset plot
     tryCatch({
         p <- ggplot(tmp, aes(k, n_known_vars)) + geom_line() +
@@ -830,7 +819,6 @@ for (cell.type in cell.types) {
     names(x) <- paste0("k_", 1:(k_stop-1))
 
                                     
-    # # options(repr.plot.width = 5, repr.plot.height = 6, repr.plot.res = 300)
     tryCatch({
         p <- upset(fromList(x), order.by = "freq", nsets = 100,
         text.scale = c(1, 1, 1, 1, 1, 2)) #c(intersection size title, intersection size tick labels,
@@ -946,9 +934,7 @@ for (cell.type in cell.types) {
     ### Run GSEA on each cell type and disease
     KEGG_react <- gmtPathways('/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/GSEA_files/reactome_kegg.gmt.txt')
 
-    # mainDir <- '/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/outputs/fGSEA_PanKbase/'
     mainDir <- outdir
-    # dir.create(file.path(mainDir))
 
     rpl <- fread('/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/GSEA_files/rpl_file_gsea.csv', fill=TRUE, header=TRUE)
     rps <- fread('/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/GSEA_files/rps_file_gsea.csv', fill=TRUE, header=TRUE)

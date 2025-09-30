@@ -1,5 +1,5 @@
 #' Helper functions, adapted from Walker, Saunders & Rai et al. https://www.nature.com/articles/s41586-023-06693-2
-#' Helper functions directly from Ha Vu (Parker Lab, University of Michigan) https://github.com/PanKbase/PanKbase-DEG-analysis/tree/main
+#' Helper functions adapted from Ha Vu (Parker Lab, University of Michigan) https://github.com/PanKbase/PanKbase-DEG-analysis/tree/main
 
 suppressPackageStartupMessages({
   require(magrittr)

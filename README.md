@@ -57,12 +57,14 @@ All parameters are summarized in [pankbase_new_contrasts.csv](src/pankbase_new_c
 
 - AAB+ status (AAB+_status):
     - Additional donor filtering:
+        - Only donors with AAB data
         - Non-diabetic donors **only**, regardless of AAB status
     - Initial DESeq formula:
         - `~ age + sex + bmi + ethnicity + chemistry + aab`
 
 - AAB GADA+ (AAB_GADA):
     - Additional donor filtering:
+        - Only donors with AAB data
         - Non-diabetic donors **only**
         - No donors positive for AAB *other than* GADA (must be AAB- or GADA+ only)
     - Initial DESeq formula:
@@ -70,6 +72,7 @@ All parameters are summarized in [pankbase_new_contrasts.csv](src/pankbase_new_c
 
 - AAB IA2+ (AAB _IA2):
     - Additional donor filtering:
+        - Only donors with AAB data
         - Non-diabetic donors **only**
         - No donors positive for AAB *other than* IA2 (must be AAB- or IA2+ only)
     - Initial DESeq formula:
@@ -77,6 +80,7 @@ All parameters are summarized in [pankbase_new_contrasts.csv](src/pankbase_new_c
 
 - AAB IAA+ (AAB_IAA):
     - Additional donor filtering:
+        - Only donors with AAB data
         - Non-diabetic donors **only**
         - No donors positive for AAB *other than* IAA (must be AAB- or IAA+ only)
     - Initial DESeq formula:
@@ -84,6 +88,7 @@ All parameters are summarized in [pankbase_new_contrasts.csv](src/pankbase_new_c
 
 - AAB ZNT8+ (AAB_ZNT8):
     - Additional donor filtering:
+        - Only donors with AAB data
         - Non-diabetic donors **only**
         - No donors positive for AAB *other than* ZNT8 (must be AAB- or ZNT8+ only)
     - Initial DESeq formula:
@@ -91,6 +96,7 @@ All parameters are summarized in [pankbase_new_contrasts.csv](src/pankbase_new_c
 
 - Multiple AABs (Multi_AAB)
     - Additional donor filtering:
+        - Only donors with AAB data
         - Non-diabetic donors **only**
         - Must be either AAB- or positive for $\geq$ 2 AABs
     - Initial DESeq formula:

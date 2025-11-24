@@ -26,7 +26,6 @@ suppressPackageStartupMessages(library(fgsea))
 suppressMessages(library(tibble))
 suppressMessages(library(tidyr))
 
-
 source("0_utils_pankbase.R")
 
 
@@ -126,7 +125,6 @@ add_meta <- read.table("/tscc/nfs/home/lebrusman/Gaulton_lab/data/ADA_object/met
 add_meta <- distinct(add_meta[, c("rrid", grep("PanKbase", colnames(add_meta), value = T))])
 colnames(add_meta) <- colnames(add_meta) %>% janitor::make_clean_names()
 meta_in_sc <- inner_join(meta_in_sc, add_meta, by = c("rrid" = "rrid"))
-# print(colnames(meta_in_sc))
 
 
 # manually fix some metadata due to mismatching info across releases
@@ -261,9 +259,6 @@ if (contrast_id == "ND_vs_T1D") {
     write.table(meta_in_sc, paste0(outdir, "meta_in_sc_251118.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
 
 }
-# quit()
-
-# meta_in_sc <- read.table(paste0(outdir, "meta_in_sc_250916.tsv"), header = TRUE)
 
 
 metadata <- meta_in_sc
@@ -347,8 +342,7 @@ for (cell.type in cell.types) {
     }
     
     tmp <- cell.prop[cell.prop$Freq > ncells & 
-                     # cell.prop$diabetes_status_description %in% c("NonDiabetic", "T1DM") & #remove for other contrasts
-              cell.prop$Var1 %in% tmp$Var1,] #keep donor has a `diabetes_status_description` of `type 1 diabetes` or `non-diabetes`
+              cell.prop$Var1 %in% tmp$Var1,]
     print(paste("nrow tmp:", nrow(tmp)))
 
     
@@ -360,9 +354,6 @@ for (cell.type in cell.types) {
     colnames(coldata) <- gsub("_", ".", colnames(coldata)) #may have to find a better place for this
 
     coldata <- coldata[!is.na(coldata[[contrast_var]]), ] #get rid of na values if need to
-    print("here is coldata after removing NAs")
-    print(coldata)
-    print(nrow(coldata))
 
     # if (nrow(coldata) < 3) {
     #     er <- "less than 3 samples left after filtering"
@@ -1071,37 +1062,6 @@ for (cell.type in cell.types) {
     
     dev.off()
 
-                                    
-    # top10_up <- res[which(res$ES > 0),][c(1:10),]
-    # top10_down <- res[which(res$ES < 0),][c(1:10),]
-    # top10_up$LOG10P <- -log10(top10_up$pval)
-    # top10_down$LOG10P <- -log10(top10_down$pval)
-    
-    # KEGG_react_fgseaRes_filt <- unnest(KEGG_react_fgseaRes, leadingEdge)
-    # KEGG_react_fgseaRes_filt <- as.data.frame(KEGG_react_fgseaRes_filt)
-    # colnames(KEGG_react_fgseaRes_filt)[8] <- "RUVSeq_leading_gene"
-    
-    # res_tib <- unnest(res, leadingEdge)
-    # res_df <- as.data.frame(res_tib)
-    # colnames(res_df)[8] <- "RUVSeq_leading_gene"
-    # #TF_res <- inner_join(Beta_TFmodules_removeDups, res_df, by = "gene",multiple = "all")
-        
-    
-    # res_filt <- rbind(top10_up,top10_down)
-    # res_tib_filt <- unnest(res_filt, leadingEdge)
-    # res_df_filt <- as.data.frame(res_tib_filt)
-    # colnames(res_df_filt)[8] <- "RUVSeq_leading_gene"
-    
-    
-    # Out_file1 = paste0(mainDir,cell.type, "_", contrast_id,'_fGSEA_res_df.csv')
-    # write.csv(res_df,Out_file1, quote=FALSE)
-    
-    # Out_file2 = paste0(mainDir,cell.type, "_", contrast_id,'_fGSEA_res_df_top10.csv')
-    # write.csv(res_df_filt,Out_file2, quote=FALSE)
-    
-    # Out_file3 = paste0(mainDir, cell.type, "_", contrast_id,'_fGSEA_res_df_allRes_unfilt.csv')
-    # write.csv(KEGG_react_fgseaRes_filt,Out_file3, quote=FALSE)
-    
         
 }
                                     

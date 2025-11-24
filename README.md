@@ -24,7 +24,7 @@ Reasons pipeline could fail/exit early:
 
 
 ## Contrast-specific parameters
-All parameters are summarized in [pankbase_new_contrasts.csv](src/pankbase_new_contrasts.csv)
+All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/pankbase_new_contrasts.csv)
 - No diabetes vs. type 1 diabetes (ND_vs_T1D): 
     - Additional donor filtering:
         - None

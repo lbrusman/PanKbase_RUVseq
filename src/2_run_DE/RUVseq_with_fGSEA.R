@@ -1,5 +1,3 @@
-## Pipeline adapted from: https://github.com/PanKbase/PanKbase-DEG-analysis/tree/main
-
 suppressMessages(library(Seurat))
 suppressMessages(library(stringr))
 suppressMessages(library(parallel))
@@ -85,6 +83,7 @@ covariants <- contrast_var
 
 #get subsets out
 subset1 <- str_split(subset1, pattern = "_") %>% unlist()
+print(subset1)
 subset2 <- str_split(subset2, pattern = "_") %>% unlist()
 
 #do RUVseq for T1D vs. non-diabetic
@@ -96,6 +95,10 @@ fdr <- 0.05
 
 data <- readRDS("/tscc/nfs/home/lebrusman/Gaulton_lab/data/ADA_object/250424_ADA_object_metadata_v3_3.rds")
 print(data)
+
+outdir <- outdir
+
+fdr <- 0.05
 
 for (s in c("SRR27326986", "SRR27326987", "SRR27326992", "SRR27326993",
             "SRR27326994", "SRR27326995", "SRR27326996", "SRR27326997")) {
@@ -123,6 +126,7 @@ add_meta <- read.table("/tscc/nfs/home/lebrusman/Gaulton_lab/data/ADA_object/met
 add_meta <- distinct(add_meta[, c("rrid", grep("PanKbase", colnames(add_meta), value = T))])
 colnames(add_meta) <- colnames(add_meta) %>% janitor::make_clean_names()
 meta_in_sc <- inner_join(meta_in_sc, add_meta, by = c("rrid" = "rrid"))
+# print(colnames(meta_in_sc))
 
 
 # manually fix some metadata due to mismatching info across releases
@@ -212,14 +216,18 @@ colnames(meta_in_sc) <- c('samples', 'mean_nCount_RNA', 'mean_nFeature_RNA', 'me
                           'ethnicity', 'isolation_center',
                           'c_peptide', 'hb_a1c')
 
+print(head(meta_in_sc))
 
 meta_in_sc$isolation_center <- gsub("  ", "", meta_in_sc$isolation_center)
 meta_in_sc$isolation_center <- gsub(" ", "", meta_in_sc$isolation_center)
 
 #added by liza
 meta_in_sc$number.aab <- rowSums(meta_in_sc[,c("aab_gada", "aab_ia_2", "aab_iaa", "aab_znt8")] == "TRUE", na.rm = FALSE) #changed from na.rm = FALSE
+meta_in_sc$number.aab <- ifelse(meta_in_sc$aab_gada %in% c("TRUE", "FALSE"), meta_in_sc$number.aab, NA)
 
-meta_in_sc$multi.aab <- ifelse(meta_in_sc$number.aab >= 2, "TRUE", "FALSE")
+meta_in_sc$multi.aab <- ifelse(meta_in_sc$number.aab >= 2 & meta_in_sc$aab_gada %in% c("TRUE", "FALSE"), "MultiAAB", 
+                              ifelse(meta_in_sc$number.aab == 1 & meta_in_sc$aab_gada %in% c("TRUE", "FALSE"), "1AAB",
+                                    ifelse(meta_in_sc$number.aab == 0 & meta_in_sc$aab_gada %in% c("TRUE", "FALSE"), "ZeroAAB", NA)))
 
 meta_in_sc$only.aab.gada <- ifelse(meta_in_sc$aab_gada == "TRUE" & meta_in_sc$aab_ia_2 == "FALSE" &
                                   meta_in_sc$aab_iaa == "FALSE" & meta_in_sc$aab_znt8 == "FALSE", "TRUE", "FALSE")
@@ -231,22 +239,29 @@ meta_in_sc$only.aab.znt8 <- ifelse(meta_in_sc$aab_gada == "FALSE" & meta_in_sc$a
                                   meta_in_sc$aab_iaa == "FALSE" & meta_in_sc$aab_znt8 == "TRUE", "TRUE", "FALSE")
 
 
-cell.types <- c("Beta", "ActiveStellate", "CyclingAlpha", "Delta", "Endothelial", 
-                "Gamma+Epsilon", "Immune(Macrophages)", "MUC5B+Ductal", "QuiescentStellate", 
-                "Alpha", "Acinar", "Ductal")
-cell.types <- cell.types[order(cell.types)]
+#get new column with all aab info
+meta_in_sc$all.aab.info <- meta_in_sc$multi.aab
+meta_in_sc$all.aab.info <- ifelse(meta_in_sc$only.aab.gada == "TRUE", "OnlyGADA",
+                                           ifelse(meta_in_sc$only.aab.ia.2 == "TRUE", "OnlyIA2",
+                                                 ifelse(meta_in_sc$only.aab.iaa == "TRUE", "OnlyIAA",
+                                                       ifelse(meta_in_sc$only.aab.znt8 == "TRUE", "OnlyZNT8", meta_in_sc$all.aab.info))))
 
-for (cell.type in cell.types) {
-    cell.prop <- data.frame(table(data@meta.data[data@meta.data$coarse_annot == cell.type, "samples"]))
-    write.table(cell.prop, paste0(outdir, "cell_props/cell.prop_", cell.type, ".txt"),
-                quote = F, sep = "\t", row.names = F)
 
-}
+
+# for (cell.type in c("Acinar", "ActiveStellate", "CyclingAlpha", "Delta", "Endothelial", "Gamma+Epsilon", 
+#                     "Immune(Macrophages)", "MUC5B+Ductal", "QuiescentStellate", "Alpha", "Beta", "Ductal")) {
+#     cell.prop <- data.frame(table(data@meta.data[data@meta.data$coarse_annot == cell.type, "samples"]))
+#     write.table(cell.prop, paste0(outdir, "cell_props/", "cell.prop_", cell.type, ".txt"),
+#                 quote = F, sep = "\t", row.names = F)
+
+
+# }
 
 if (contrast_id == "ND_vs_T1D") {
-    write.table(meta_in_sc, paste0(outdir, "meta_in_sc_250923.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+    write.table(meta_in_sc, paste0(outdir, "meta_in_sc_251118.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
 
 }
+# quit()
 
 # meta_in_sc <- read.table(paste0(outdir, "meta_in_sc_250916.tsv"), header = TRUE)
 
@@ -256,11 +271,17 @@ metadata <- metadata[metadata$treatments == "no_treatment",]
 
 
 # Now let's do the DE analysis - loop through all celltypes
-
+cell.types <- c("Beta", "ActiveStellate", "CyclingAlpha", "Delta", "Endothelial", 
+            "Gamma+Epsilon", "Immune(Macrophages)", "MUC5B+Ductal", "QuiescentStellate", 
+            "Alpha", "Acinar", "Ductal")
+cell.types <- cell.types[order(cell.types)]
+print(cell.types)
 ncells <- 20
 minreads <- 10
 minprop <- 0.25
 nlatent.base <- 10
+
+input_dir <- "/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/outputs/250903_outs/pseudobulk_counts/"
 
 
 de_stats <- data.frame()
@@ -268,7 +289,7 @@ for (cell.type in cell.types) {
     print(cell.type)
     pdf(paste0(outdir, cell.type, "_", contrast_id, "_all_plots.pdf"))
 
-    cell.prop <- read.table(paste0(outdir, "cell_props/cell.prop_", cell.type, ".txt"), header = T) # cell counts and proportions in large map
+    cell.prop <- read.table(paste0("/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/outputs/250903_outs/cell_props/cell.prop_", cell.type, ".txt"), header = T) # cell counts and proportions in large map
     metadata <- meta_in_sc
     metadata <- metadata[metadata$treatments == "no_treatment",]
     
@@ -293,27 +314,41 @@ for (cell.type in cell.types) {
                                                     ifelse(cell.prop$aab == "AAB+" & cell.prop$diabetes_status_description == "NonDiabetic",
                                                            cell.prop$aab, cell.prop$diabetes_status_description))
     tmp <- cell.prop[cell.prop$Freq > ncells,] #keep non-treated samples with > 20 cells
+    print("here is n samps with >20 cells")
+    print(nrow(tmp))
         
     colnames(tmp) <- gsub("_", ".", colnames(tmp))
     if (control_grp != "NA") {
+        print(control_grp)
+        print(experimental_grp)
         tmp <- tmp[which(tmp[[contrast_var]] %in% c(control_grp, experimental_grp)), ]
+        print("done with this group subset")
+        print(tmp[[contrast_var]])
+        print(nrow(tmp))
 
     }
 
     if (subset_on1 != "NA") {
         print(subset1)
         tmp <- tmp[which(tmp[[subset_on1]] %in% subset1), ]
+        print("done with this subset1")
+        print(tmp[[subset_on1]])
+        print(nrow(tmp))
 
     }
 
     if (subset_on2 != "NA") {
         print(subset2)
         tmp <- tmp[which(tmp[[subset_on2]] %in% subset2), ]
+        print("done with this subset2")
+        print(tmp[[subset_on2]])
+        print(nrow(tmp))
 
     }
     
     tmp <- cell.prop[cell.prop$Freq > ncells & 
-              cell.prop$Var1 %in% tmp$Var1,]
+                     # cell.prop$diabetes_status_description %in% c("NonDiabetic", "T1DM") & #remove for other contrasts
+              cell.prop$Var1 %in% tmp$Var1,] #keep donor has a `diabetes_status_description` of `type 1 diabetes` or `non-diabetes`
     print(paste("nrow tmp:", nrow(tmp)))
 
     
@@ -322,35 +357,39 @@ for (cell.type in cell.types) {
     coldata <- inner_join(coldata, tmp[,c("Var1", "aab")], by = c("samples" = "Var1"))
     coldata$aab <- as.factor(coldata$aab)
     
-    colnames(coldata) <- gsub("_", ".", colnames(coldata))
+    colnames(coldata) <- gsub("_", ".", colnames(coldata)) #may have to find a better place for this
 
     coldata <- coldata[!is.na(coldata[[contrast_var]]), ] #get rid of na values if need to
+    print("here is coldata after removing NAs")
+    print(coldata)
+    print(nrow(coldata))
 
-    if (nrow(coldata) < 2) {
-        er <- "less than 2 samples left after filtering"
+    # if (nrow(coldata) < 3) {
+    #     er <- "less than 3 samples left after filtering"
 
-        mini_df <- data.frame(celltype = cell.type,
-                          contrast = contrast_id,
-                          n_control_samps = "NA",
-                          n_experimental_samps = "NA",
-                          n_samples_total = nrow(coldata),
-                          base_formula = "NA",
-                          n_base_DE_feats = "NA",
-                          ruv_formula = "NA",
-                          n_ruv_DE_feats = "NA",
-                          error_message = er
-                         )
-        de_stats <- rbind(de_stats, mini_df)
+    #     mini_df <- data.frame(celltype = cell.type,
+    #                       contrast = contrast_id,
+    #                       n_control_samps = "NA",
+    #                       n_experimental_samps = "NA",
+    #                       n_samples_total = nrow(coldata),
+    #                       base_formula = "NA",
+    #                       n_base_DE_feats = "NA",
+    #                       ruv_formula = "NA",
+    #                       n_ruv_DE_feats = "NA",
+    #                       error_message = er
+    #                      )
+    #     de_stats <- rbind(de_stats, mini_df)
         
-        dev.off()
-        { next }
+    #     dev.off()
+    #     { next }
         
-    }
+    # }
 
     coldata <- data.frame(coldata)
     rownames(coldata) <- coldata$samples
 
-    raw_mat <- read.table(paste0(indir, cell.type, "_sample_gex_total_counts.txt"), header = T)
+    dir <- '/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/outputs/250903_outs/pseudobulk_counts/'
+    raw_mat <- read.table(paste0(dir, cell.type, "_sample_gex_total_counts.txt"), header = T)
 
     coldata$samples <- gsub("-", ".", coldata$samples)
     tmp$Var1 <- gsub("-", ".", tmp$Var1)
@@ -415,7 +454,7 @@ for (cell.type in cell.types) {
     for (i in c('study', 'samples', 'rrid', 'treatments', 'chemistry', 'sex', #'samples', 
                 'diabetes.status.description', 'tissue.source', 'ethnicity',
                 'aab.gada', 'aab.ia.2', 'aab.iaa', 'aab.znt8', 
-                'number.aab', 'multi.aab', 'only.aab.gada', 'only.aab.ia.2', 'only.aab.iaa', 'only.aab.znt8')) {
+                'number.aab', 'multi.aab', 'only.aab.gada', 'only.aab.ia.2', 'only.aab.iaa', 'only.aab.znt8', 'all.aab.info')) {
         coldata[, i] <- as.factor(coldata[, i])
         
     }
@@ -423,15 +462,11 @@ for (cell.type in cell.types) {
 
     colnames(coldata)[which(colnames(coldata) == "samples")] <- "sample.id"
 
-    #scale age and bmi if desired
+    # #scale age and bmi
     if (scale == "TRUE") {
-      print("scale is TRUE")
-      coldata$age <- scale(coldata$age)
-      coldata$bmi <- scale(coldata$bmi)
-      coldata$c.peptide <- scale(coldata$c.peptide)
-      coldata$hb.a1c <- scale(coldata$hb.a1c)
+        coldata$age <- scale(coldata$age)
+        coldata$bmi <- scale(coldata$bmi)
     }
-    
 
 
     # normalize for library sizes
@@ -439,26 +474,27 @@ for (cell.type in cell.types) {
     celltype_norm_counts <- t(apply(raw_mat, 1, function(x) x/size.factors))
     celltype_norm_counts.log <- log2(celltype_norm_counts + 1) # add a pseudocount
 
+    # options(repr.plot.width = 12, repr.plot.height = 6, repr.plot.res = 300)
 
-    #make plots to explore covariates
-    ord_idx <- match(colnames(celltype_norm_counts.log), coldata$sample.id)
-    group = contrast_var
-    par(mfrow=c(2,3))
-    colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
-    EDASeq::plotRLE(celltype_norm_counts, col = colors, outline = FALSE, las = 3, cex.axis = 1, ylab = "Relative Log Expression", main = NULL, cex.main = .5)
-    EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = F, main = group)
-    group = "tissue.source"
-    colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
-    EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = T, main = group)
-    group = "isolation.center"
-    colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
-    EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = T, main = group)
-    group = "sex"
-    colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
-    EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = F, main = group)
-    group = "chemistry"
-    colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
-    EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = F, main = group)
+    # #make plots to explore covariates
+    # ord_idx <- match(colnames(celltype_norm_counts.log), coldata$sample.id)
+    # group = contrast_var
+    # par(mfrow=c(2,3))
+    # colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
+    # EDASeq::plotRLE(celltype_norm_counts, col = colors, outline = FALSE, las = 3, cex.axis = 1, ylab = "Relative Log Expression", main = NULL, cex.main = .5)
+    # EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = F, main = group)
+    # group = "tissue.source"
+    # colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
+    # EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = T, main = group)
+    # group = "isolation.center"
+    # colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
+    # EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = T, main = group)
+    # group = "sex"
+    # colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
+    # EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = F, main = group)
+    # group = "chemistry"
+    # colors <- RColorBrewer::brewer.pal(9, "Set1")[as.factor(coldata[ord_idx, ][[group]])]
+    # EDASeq::plotPCA(celltype_norm_counts, col = colors, cex = .5, cex.lab = 0.75, cex.axis = 1, labels = F, main = group)
 
     if (is.factor(coldata[,contrast_var])) {
         n_control_samps = nrow(coldata[coldata[,contrast_var] == control_grp, ])
@@ -521,12 +557,19 @@ for (cell.type in cell.types) {
         }
     }
 
+    #let's save what coldata is actually being used
+    write.table(coldata, paste0(outdir, cell.type, "_", contrast_id, "_meta_in_sc_251118.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+    # quit()
+
+
     # Create dds object
     dds <- create_dds_obj(raw_mat, coldata)
 
     #plot initial volcano plot - Liza
     base_design <- paste0("~", paste0(covariates_list, collapse = "+"), "+", contrast_var)
 
+                                    
+    # base_design <- "~ diabetes_status_description+sex+age+bmi+ethnicity"
     additional_covs <- c("chemistry")
 
     # Run this chunk on a SLURM job in case k is relatively large. When k = 30, it takes ~ 45 mins to run the analysis
@@ -556,6 +599,7 @@ for (cell.type in cell.types) {
             # extract results for the specified FDR threshold
             result <- DESeq2::results(dds, contrast = contrast_vec)
         }
+        # contrast_vec = c("diabetes_status_description", "T1DM", "NonDiabetic") # fold change = numerator / denominator
         else {
             print("var is numeric")
             celltype_de_explore <- run_many_designs_deseq_continuous(
@@ -622,6 +666,7 @@ for (cell.type in cell.types) {
             theme_bw() +
             theme(plot.title = element_text(size = 8))
     plot <- plot + ggrepel::geom_text_repel(data = topxs, aes(x = log2FoldChange, y = -log10(pvalue), label = geneid), size = 3)
+    # options(repr.plot.width = 6, repr.plot.height = 5, repr.plot.res = 300)
     print(plot)
 
     cat_vars <- c("sex", "diabetes.status.description", "ethnicity", "chemistry")
@@ -632,7 +677,8 @@ for (cell.type in cell.types) {
         n_subtract <- n_subtract + i_len
     }
     n_subtract <- n_subtract + length(cont_vars) + 1
-    nlatent <- min(nlatent.base, nrow(coldata)-length(covariates_list)-3)
+    # nlatent <- min(nlatent.base, nrow(coldata)-n_subtract)
+    nlatent <- min(nlatent.base, nrow(coldata)-length(covariates_list)-4)
     print(paste("nlatent =", nlatent))
     if (nlatent <= 0) {
         er <- "max nlatent is zero"
@@ -701,7 +747,7 @@ for (cell.type in cell.types) {
             dds,
             design = base_design,
             name = contrast_var,
-            k = min(nlatent, 10), #k at most is number of samples - number covariates in base model - 1 intercept
+            k = min(nlatent, 10), #k at most is number of samples - 6 covariates in base model - 1 intercept
             p.val.thresh = 0.5,
             method = "ruvg"
         )
@@ -736,34 +782,41 @@ for (cell.type in cell.types) {
 
     
     coldata <- data.frame(colData(celltype_de_explore[[base_design]]$dds))
+    print(head(coldata))
     cell.prop$Var1 <- gsub("-", ".", cell.prop$Var1)
     tmp_df <- distinct(cell.prop[, c("Var1", "Freq")])
     tmp_df <- cell.prop[, c("Var1", "Freq")]
+    print(head(tmp_df))
     colnames(tmp_df) <- c("sample.id", "cell_counts")
     coldata <- inner_join(coldata, tmp_df, by = c("sample.id" = "sample.id"))
     rownames(coldata) <- coldata$sample.id
+    print(head(coldata))
+
 
     k <- length(celltype_ruvseq)
     tmp <- data.frame(celltype_ruvseq[[k]]$W) %>% tibble::rownames_to_column("sample.id")
     tmp <- combine_by_sampleid(coldata, tmp)
+    print("final tmp:")
+    print(head(tmp))
     tmp <- dplyr::select(tmp, -any_of(c("sample.id", "rrid", "samples"))) %>%
         DataExplorer::dummify() %>%
         dplyr::select_if(is_almost_ok, ~.x)
     a <- psych::corr.test(tmp[, grep("W_", colnames(tmp))], tmp[, grep("W_|PC", colnames(tmp), invert = T)],
                          use = "na.or.complete", method = "spearman", adjust = "BH")
-    print(a)
+    # print(a)
     
-    # options(repr.plot.width = 15, repr.plot.height = 12, repr.plot.res = 300)
-    tryCatch({
-        corrplot::corrplot(a$r, p.mat = a$p.adj, tl.cex = .75, sig.level = c(0.01, 0.05, 0.1), pch.cex = 0.8,
-                         insig = "label_sig", diag = FALSE)
-    }, error = function(e) {
-        print("could not plot corrplot. number of latent vars may = 1")
-    })
+    # tryCatch({
+    #     corrplot::corrplot(a$r, p.mat = a$p.adj, tl.cex = .75, sig.level = c(0.01, 0.05, 0.1), pch.cex = 0.8,
+    #                      insig = "label_sig", diag = FALSE)
+    # }, error = function(e) {
+    #     print("could not plot corrplot. number of latent vars may = 1")
+    # })
     
 
     ## calculate which k to search
     tmp <- rowSums(a$p.adj < 0.05)
+    print("here is number of p.adj < 0.05")
+    print(tmp)
     if (all(tmp == 0) || length(tmp) == 0) {
         er <- "no known vars correlate with latent vars?"
 
@@ -795,22 +848,24 @@ for (cell.type in cell.types) {
 
     print(paste0("k_stop = ", k_stop))
     
+    # options(repr.plot.width = 6, repr.plot.height = 4, repr.plot.res = 300)
     #try to plot upset plot
-    tryCatch({
-        p <- ggplot(tmp, aes(k, n_known_vars)) + geom_line() +
-          geom_point() + ggrepel::geom_text_repel(aes(label = glue("{n_known_vars}")), max.overlaps = Inf, box.padding = 0.1) +
-          scale_x_continuous(breaks=seq(0, length(celltype_ruvseq), by=1)) +
-          labs(x = 'Num. of latent variables', y = 'Total n known vars significantly corr.',
-               title = glue("{cell.type}_nCells-{20}_reads-{10}_in-{1/4}-nSamples_fdr-{0.05}")) +
-          theme_bw()
-        print(p)
-    }, error = function(e) {
-        print("couldn't make corr line plot plot. keep going...")
-    })
+    # tryCatch({
+    #     p <- ggplot(tmp, aes(k, n_known_vars)) + geom_line() +
+    #       geom_point() + ggrepel::geom_text_repel(aes(label = glue("{n_known_vars}")), max.overlaps = Inf, box.padding = 0.1) +
+    #       scale_x_continuous(breaks=seq(0, length(celltype_ruvseq), by=1)) +
+    #       labs(x = 'Num. of latent variables', y = 'Total n known vars significantly corr.',
+    #            title = glue("{cell.type}_nCells-{20}_reads-{10}_in-{1/4}-nSamples_fdr-{0.05}")) +
+    #       theme_bw()
+    #     # print(p)
+    # }, error = function(e) {
+    #     print("couldn't make corr line plot plot. keep going...")
+    # })
 
 
     #find which known vars. corr. with latent vars
     tmp <- data.frame(a$p.adj < 0.05)[1:(k_stop-1),]
+    print(tmp)
     x <- vector(mode = "list", length = length(1:(k_stop-1)))
     for (k in 1:(k_stop-1)) {
         j <- which(1:(k_stop-1) == k)
@@ -819,11 +874,12 @@ for (cell.type in cell.types) {
     names(x) <- paste0("k_", 1:(k_stop-1))
 
                                     
+    # # options(repr.plot.width = 5, repr.plot.height = 6, repr.plot.res = 300)
     tryCatch({
         p <- upset(fromList(x), order.by = "freq", nsets = 100,
         text.scale = c(1, 1, 1, 1, 1, 2)) #c(intersection size title, intersection size tick labels,
                                             #set size title, set size tick labels, set names, numbers above bars).
-        print(p)
+        # print(p)
 
     }, error = function(e) {
         print("couldn't make upset plot. keep going...")
@@ -858,10 +914,13 @@ for (cell.type in cell.types) {
     } else {
         k_chosen <- find_smallest_k_with_unique(x)
     }
-    k_chosen <- max(k_chosen)
-    print(paste("k chosen:", k_chosen))
+                                    
+    tryCatch({
+        k_chosen <- max(k_chosen)
+        print(paste("k chosen:", k_chosen))
+    })
 
-    if (is.null(k_chosen) || k_chosen == 0) {
+    if (is.null(k_chosen) || k_chosen == 0 || k_chosen == Inf || k_chosen == -Inf) {
         er <- "k_chosen is null or zero"
 
         mini_df <- data.frame(celltype = cell.type,
@@ -884,6 +943,13 @@ for (cell.type in cell.types) {
 
 
     k <- max(k_chosen)
+
+    #to save norm counts
+    norm_cts <- celltype_ruvseq[[k]]$normCounts
+    fname <- paste0(outdir, cell.type, "_", contrast_id, "_RUV_norm_cts.tsv")
+    write.table(norm_cts, fname, sep = "\t", quote = FALSE, row.names = TRUE)
+
+                                    
     de_object <- celltype_ruvseq[[k]]$de
     print(de_object$design)
     fdr <- 0.05
@@ -911,7 +977,7 @@ for (cell.type in cell.types) {
     # options(repr.plot.width = 6, repr.plot.height = 5, repr.plot.res = 300)
     print(plot)
 
-    dev.off()
+    # dev.off()
 
                                     
     mini_df <- data.frame(celltype = cell.type,
@@ -935,6 +1001,7 @@ for (cell.type in cell.types) {
     KEGG_react <- gmtPathways('/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/GSEA_files/reactome_kegg.gmt.txt')
 
     mainDir <- outdir
+    # dir.create(file.path(mainDir))
 
     rpl <- fread('/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/GSEA_files/rpl_file_gsea.csv', fill=TRUE, header=TRUE)
     rps <- fread('/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/GSEA_files/rps_file_gsea.csv', fill=TRUE, header=TRUE)
@@ -943,6 +1010,8 @@ for (cell.type in cell.types) {
     ribo_proteins <- c(rpl$`Approved symbol`, rps$`Approved symbol`, mtr$`Approved symbol`)
     ribo_proteins <- ribo_proteins[which(ribo_proteins != 'Approved symbol')]
     
+    
+   # beta_t1d <- beta_t1d[which(!rownames(beta_t1d) %in% ribo_proteins),]
     res <- to_save
     res <- res[which(!rownames(res) %in% ribo_proteins),]
     res$rank = (-log10(as.numeric(res$pvalue)))*res$log2FoldChange
@@ -965,12 +1034,74 @@ for (cell.type in cell.types) {
     FDR_tresh = 0.10
     KEGG_react_fgseaRes.tresh = KEGG_react_fgseaRes[KEGG_react_fgseaRes$padj < FDR_tresh,]
     message("Number of significant terms: ", cell.type,": ",nrow(KEGG_react_fgseaRes.tresh))
+    ## Add categories
+    # res <- KEGG_react_fgseaRes.tresh
 
     res <- KEGG_react_fgseaRes[order(KEGG_react_fgseaRes$pval), ]
     res_sig <- res[res$padj < FDR_tresh,]
     
     fwrite(res, file=paste0(mainDir, cell.type, "_", contrast_id, "_fGSEA_res_all.tsv"), sep="\t", sep2=c("", " ", ""), quote = FALSE)
     fwrite(res_sig, file=paste0(mainDir, cell.type, "_", contrast_id, "_fGSEA_res_signif.tsv"), sep="\t", sep2=c("", " ", ""), quote = FALSE)
+
+    # fgsea_res_ord <- res[order(res$NES, decreasing = TRUE),]
+    # fgsea_res_top <- fgsea_res_ord %>% slice_head(n = 10)
+
+    fgsea_res_ord <- res_sig[order(res_sig$NES, decreasing = TRUE),]
+    fgsea_res_top <- fgsea_res_ord %>% slice_head(n = 10)
+    fgsea_res_bottom <- fgsea_res_ord %>% slice_tail(n = 10)
+    fgsea_tops <- rbind(fgsea_res_top, fgsea_res_bottom)
+
+    nrow_sig <- nrow(res_sig)
+
+    if (nrow_sig > 0) {
+        top_n <- min(20, nrow_sig)
+        fgsea_top_sig <- res_sig[1:top_n,]
+
+        p <- ggplot(fgsea_top_sig, aes(reorder(pathway, NES), NES)) +
+              geom_col(aes(fill=padj)) +
+              coord_flip() +
+              labs(x="Pathway", y="Normalized Enrichment Score",
+                   title="Top significant pathways (p < 0.1) from GSEA") + 
+              theme_minimal() +
+              theme(text = element_text(size = 6))
+        print(p)
+
+    }
+
+    
+    dev.off()
+
+                                    
+    # top10_up <- res[which(res$ES > 0),][c(1:10),]
+    # top10_down <- res[which(res$ES < 0),][c(1:10),]
+    # top10_up$LOG10P <- -log10(top10_up$pval)
+    # top10_down$LOG10P <- -log10(top10_down$pval)
+    
+    # KEGG_react_fgseaRes_filt <- unnest(KEGG_react_fgseaRes, leadingEdge)
+    # KEGG_react_fgseaRes_filt <- as.data.frame(KEGG_react_fgseaRes_filt)
+    # colnames(KEGG_react_fgseaRes_filt)[8] <- "RUVSeq_leading_gene"
+    
+    # res_tib <- unnest(res, leadingEdge)
+    # res_df <- as.data.frame(res_tib)
+    # colnames(res_df)[8] <- "RUVSeq_leading_gene"
+    # #TF_res <- inner_join(Beta_TFmodules_removeDups, res_df, by = "gene",multiple = "all")
+        
+    
+    # res_filt <- rbind(top10_up,top10_down)
+    # res_tib_filt <- unnest(res_filt, leadingEdge)
+    # res_df_filt <- as.data.frame(res_tib_filt)
+    # colnames(res_df_filt)[8] <- "RUVSeq_leading_gene"
+    
+    
+    # Out_file1 = paste0(mainDir,cell.type, "_", contrast_id,'_fGSEA_res_df.csv')
+    # write.csv(res_df,Out_file1, quote=FALSE)
+    
+    # Out_file2 = paste0(mainDir,cell.type, "_", contrast_id,'_fGSEA_res_df_top10.csv')
+    # write.csv(res_df_filt,Out_file2, quote=FALSE)
+    
+    # Out_file3 = paste0(mainDir, cell.type, "_", contrast_id,'_fGSEA_res_df_allRes_unfilt.csv')
+    # write.csv(KEGG_react_fgseaRes_filt,Out_file3, quote=FALSE)
+    
         
 }
                                     

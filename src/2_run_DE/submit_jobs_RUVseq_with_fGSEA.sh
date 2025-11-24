@@ -31,7 +31,7 @@ export assay
 indir=/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/outputs/250903_outs/pseudobulk_counts/
 export indir
 
-outdir=/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/outputs_250923_fGSEA_all_res/
+outdir=/tscc/nfs/home/lebrusman/Gaulton_lab/code/RUVseq_pankbase/pipeline_just_for_pankbase/outputs_251118/
 mkdir -p $outdir
 export outdir
 

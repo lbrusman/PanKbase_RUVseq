@@ -1,1 +1,5 @@
 .DS_Store
+src/2_run_DE/old_files/pankbase_new_contrasts.csv
+src/2_run_DE/old_files/run_RUVseq_with_fGSEA.sh
+src/2_run_DE/old_files/RUVseq_with_fGSEA.R
+src/2_run_DE/old_files/submit_jobs_RUVseq_with_fGSEA.sh

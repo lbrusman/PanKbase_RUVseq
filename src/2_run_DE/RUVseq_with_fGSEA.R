@@ -965,11 +965,8 @@ for (cell.type in cell.types) {
             theme_bw() +
             theme(plot.title = element_text(size = 8))
     plot <- plot + ggrepel::geom_text_repel(data = topxs, aes(x = log2FoldChange, y = -log10(pvalue), label = geneid), size = 3)
-    # options(repr.plot.width = 6, repr.plot.height = 5, repr.plot.res = 300)
+
     print(plot)
-
-    # dev.off()
-
                                     
     mini_df <- data.frame(celltype = cell.type,
                           contrast = contrast_id,
@@ -1002,7 +999,6 @@ for (cell.type in cell.types) {
     ribo_proteins <- ribo_proteins[which(ribo_proteins != 'Approved symbol')]
     
     
-   # beta_t1d <- beta_t1d[which(!rownames(beta_t1d) %in% ribo_proteins),]
     res <- to_save
     res <- res[which(!rownames(res) %in% ribo_proteins),]
     res$rank = (-log10(as.numeric(res$pvalue)))*res$log2FoldChange
@@ -1025,17 +1021,12 @@ for (cell.type in cell.types) {
     FDR_tresh = 0.10
     KEGG_react_fgseaRes.tresh = KEGG_react_fgseaRes[KEGG_react_fgseaRes$padj < FDR_tresh,]
     message("Number of significant terms: ", cell.type,": ",nrow(KEGG_react_fgseaRes.tresh))
-    ## Add categories
-    # res <- KEGG_react_fgseaRes.tresh
 
     res <- KEGG_react_fgseaRes[order(KEGG_react_fgseaRes$pval), ]
     res_sig <- res[res$padj < FDR_tresh,]
     
     fwrite(res, file=paste0(mainDir, cell.type, "_", contrast_id, "_fGSEA_res_all.tsv"), sep="\t", sep2=c("", " ", ""), quote = FALSE)
     fwrite(res_sig, file=paste0(mainDir, cell.type, "_", contrast_id, "_fGSEA_res_signif.tsv"), sep="\t", sep2=c("", " ", ""), quote = FALSE)
-
-    # fgsea_res_ord <- res[order(res$NES, decreasing = TRUE),]
-    # fgsea_res_top <- fgsea_res_ord %>% slice_head(n = 10)
 
     fgsea_res_ord <- res_sig[order(res_sig$NES, decreasing = TRUE),]
     fgsea_res_top <- fgsea_res_ord %>% slice_head(n = 10)

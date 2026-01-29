@@ -3,7 +3,29 @@ This repo houses the modular RUVseq pipeline for PanKbase.
 
 Here are some additional details about the analysis, which was performed on a per-cell type basis.
 
-## General filtering
+## The most recent version (v2) of the code found [here](src/2_run_DE/v2) runs my updated RUVseq differential expression pipeline.
+## Change log for v2:
+- Updated the R script to pull pseudobulk matrices directly from the PanKbase Data Library. This drastically improves speed and now the pipeline no longer requires Seurat or the .rds object to run.
+- Updated the R script to pull donor- and biosample-level metadata directly from the PanKbase Data Library.
+    - Link to Data Library [Donor Metadata](https://data.pankbase.org/tabular-files/PKBFI3142YFIU/) used here.
+    - Link to Data Library [Biosample Metadata](https://data.pankbase.org/tabular-files/PKBFI5333IJJK/) used here.
+- Updated the method used to optimize the number of latent variables (k). Briefly, the new method to optimize the number of latent variables (k) works as follows:
+    - Find background non-DE genes by running an initial DESeq2 with variable of interest and co-variates. Background genes are genes with uncorrected p-value > 0.5
+    - Use RUVg to normalize count data separately for every 1:max_k.
+    - Calculate the relative log expression (RLE) per-sample from the normalized counts returned by RUVseq. More details about how RUVseq normalizes the data can be found [here](https://www.bioconductor.org/packages//release/bioc/vignettes/RUVSeq/inst/doc/RUVSeq.html).
+    - Run an ANOVA to determine how well each k normalizes the data (we want lowest F-statistic).
+    - Plot k vs. F-statistic - the goal is to find the elbow of the plot (first k that minimizes F-statistic before diminishing returns)
+    - In this version of the pipeline, I found the elbow of the plot by finding the point with the maximum second derivative (positive change in slope, or when the negative slope flattens out).
+    - Remove any 1:best_k latent variables that are correlated with the variable of interest.
+    - For final results, re-run DESeq2 with initial co-variates *and* final latent variables.
+- The pipeline now requires a [separate file](src/2_run_DE/v2/sc_object_cellcounts.csv) with the number of cells in each cell type per-sample. This should eventually be added to the Data Library and pulled directly from there.
+- This version does **not** include "chemistry" as a co-variate, but this should be added! Here is how I propose this should be addressed:
+    - We currently do not have all 10x sequencing chemistry in the [Measurement Set metadata](https://data.pankbase.org/multireport/?type=MeasurementSet&assay_term.term_name=single-cell+RNA+sequencing+assay&sort=sequencing_chemistry). First, we should all the chemistry info here.
+    - Then create a new Measurement Set metadata file that can be downloaded from PanKbase. 
+    - Update code to pull this info directly from the Then we can add this in to the beginning of the pipeline and 
+
+## Here is how I ran the contrasts for v1 (results uploaded to PanKbase Data Library Dec 2025). Code for this version of the pipeline can be found [here](src/2_run_DE/v1).
+### General filtering
 Donors were filtered based on the following criteria:
 1. Must have > 20 cells in that cell type
 2. Cells must not be treated with any reagents (`treatments == "no_treatment"`)
@@ -23,7 +45,7 @@ Reasons pipeline could fail/exit early:
 4. k chosen is null or zero
 
 
-## Contrast-specific parameters
+### Contrast-specific parameters
 All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/pankbase_new_contrasts.csv)
 - No diabetes vs. type 1 diabetes (ND_vs_T1D): 
     - Additional donor filtering:

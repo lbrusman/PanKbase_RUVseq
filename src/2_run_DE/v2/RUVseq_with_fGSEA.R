@@ -29,21 +29,18 @@ str(mget(keys, envir=globalenv()))
 
 set.seed(123)
 
-# Let's get donor metadata straight from PanKbase Data Library
-metadata_url <- "https://pankbase-data-v1.s3.us-west-2.amazonaws.com/analysis_resources/meta_data_table/human-donor_update_251210_v3.tar.gz"
+# Read in metadata files defined in submit_jobs
+meta_donor <- fread(meta_donor_path) %>% as.data.frame()
+meta_donor$donor_accession <- meta_donor$Accession
 
-download.file(metadata_url, destfile = "tmp.tar.gz")
-untar("tmp.tar.gz",files="human-donor_update_251210_v3/pankbase_human_donor.txt")
-meta_donor <- read.table("human-donor_update_251210_v3/pankbase_human_donor.txt", sep = "\t", header = TRUE)
+meta_biosample <- fread(biosample_url) %>% as.data.frame()
+meta_biosample$biosample_accession <- meta_biosample$Accession
 
-# Biosample metadata from Data Library
-biosample_url <- "https://pankbase-data-v1.s3.us-west-2.amazonaws.com/analysis_resources/meta_data_table/biosamples.2_2025-11-06.txt"
+# We still need cell counts, so use that (local) file too... Should be uploaded to Data Library eventually
+cell_counts <- fread(cell_counts_file) %>% as.data.frame()
 
-meta_biosample <- fread(biosample_url)
-
-
-# We still need cell counts, so use that (local) file too... Should be uploaded to Data Library
-metadata <- read.csv(metadata)
+# We also need chemistry metadata, which I got from the single cell object. That's also a local file for now
+chem_meta <- fread(chem_meta_file) %>% as.data.frame()
 
 
 # Get cell types from metadata file
@@ -66,17 +63,18 @@ correlate_vars <- str_split(correlate_vars, pattern = "_") %>% unlist()
 subset1 <- str_split(subset1, pattern = "_") %>% unlist()
 subset2 <- str_split(subset2, pattern = "_") %>% unlist()
 
+
 # Set FDR Threshold for DE
 fdr <- 0.05
 
 
 # General filters
 ncells <- 20 # min number of cells in cell type for sample to be considered
-minreads <- 10 # min reads in cell type for a gene to be kept
-minprop <- 0.25 # min percent cells in cell type gene must be expressed in to be kept
-nlatent.base <- 10
+minreads <- 5 # Only for basic and new filter (defined in 0_clean_utils.R
+minprop <- 0.25 # Only for basic and new filter (defined in 0_clean_utils.R
+nlatent.base <- 10 # Max nlatent you want to be tested
 
-#get latent vars
+# Get latent vars
 latent_vars <- paste0("W_", 1:nlatent.base)
 
 # Get base URL for pseudobulk matrices
@@ -84,31 +82,22 @@ base_url <- "https://pankbase-data-v1.s3.us-west-2.amazonaws.com/processed_data/
 
 
 de_stats <- data.frame() # Create df to hold info about DE in ALL cell types for this contrast
-for (cell.type in cell_types) {
+for (cell.type in "Beta") {
     print(cell.type)
-
-    # Set up pdf to hold all plots
-    pdf(paste0(outdir, cell.type, "_", contrast_id, "_all_plots.pdf"))
-
-    # Gotta rename some cell types to match dataframe with celltype counts
-    if (cell.type == "Immune") {
-        cell.name <- "Immune..Macrophages."
-    }
-
-    else {
-        cell.name <- gsub("[^[:alnum:]]", ".", cell.type)
-    }
-
+    
+    cell.name <- gsub("[^[:alnum:]]", ".", cell.type)
     print(cell.name)
-
-    # Filter to only samples with >= the cutoff number of cells
-    keep_meta <- metadata[metadata[,cell.name] >= ncells,]
-    print(paste0("n samps with >=20 cells = ", nrow(keep_meta)))
+    
+    # Set up pdf to hold all plots
+    pdf(paste0(outdir, cell.name, "_", contrast_id, "_all_plots.pdf"))
 
     # Change names with special characters to match cellcount file
     if (cell.type == "MUC5B+ Ductal") {
         cell.url <- "MUC5b+Ductal"
         cell.url <- URLencode(cell.url, reserved = TRUE)
+    }
+    else if (cell.type == "Immune (Macrophages)") {
+        cell.url <- URLencode("Immune", reserved = TRUE)
     }
 
     else {
@@ -120,9 +109,27 @@ for (cell.type in cell_types) {
 
     # Read in celltype pseudobulk matrix from pankbase
     celltype_url <- paste0(base_url, cell.url, file_pattern)
-    raw_mat <- fread(celltype_url)
+    skip <- FALSE
+    tryCatch({
+        raw_mat <- fread(celltype_url)
+    }, error = function(e) {
+        skip <<- TRUE
+
+        er <<- "File could not be downloaded using this url"
+        print(er)
+    })
+
+    if (skip) {
+        dev.off()
+        { next }
+    }
 
     samples <- colnames(raw_mat)[colnames(raw_mat) != "V1"]
+
+    # Filter to only samples with >= the cutoff number of cells
+    keep_meta <- cell_counts
+    keep_meta <- keep_meta[keep_meta[,cell.type] >= ncells,]
+    print(paste0("n samps with >=20 cells = ", nrow(keep_meta)))
     
     pankbase_ids <- t(raw_mat[1:4,]) %>% as.data.frame()
     colnames(pankbase_ids) <- pankbase_ids[1,]
@@ -131,22 +138,20 @@ for (cell.type in cell_types) {
 
 
     # Merge with donor metadata
-    meta_donor$donor_accession <- meta_donor$Accession
     ids_with_donor <- left_join(pankbase_ids, meta_donor, by = "donor_accession")
 
     # Merge with biosample metadata
-    meta_biosample$biosample_accession <- meta_biosample$Accession
     ids_with_donor_final <- left_join(ids_with_donor, meta_biosample, by = "biosample_accession")
 
-    ids_with_donor_final <- ids_with_donor_final %>% filter(samples %in% keep_meta$samples)
+    ids_with_donor_final <- ids_with_donor_final[ids_with_donor_final[,sample_col] %in% keep_meta[,sample_col], ] #%>% filter(samples %in% keep_meta$samples)
 
     keep_meta <- keep_meta %>% merge(ids_with_donor_final, on = sample_col)
 
     # Now filter for only no_treatment samples
     keep_meta <- keep_meta %>% filter(treatment == "no_treatment")
 
-    
-    
+    # Now add chemistry metadata
+    keep_meta <- merge(keep_meta, chem_meta, on = sample_col)
 
     # Select only one sample when a donor has more than one
     a <- data.frame(table(keep_meta$donor_accession))
@@ -158,20 +163,6 @@ for (cell.type in cell_types) {
     }
 
     keep_meta <- coldata
-
-    # Get rid of metadata rows in pseudobulk matrix now
-    raw_mat <- raw_mat[-c(1:4),]
-    rownames(raw_mat) <- raw_mat$V1
-    keep <- apply(raw_mat, 1, basic_filter) # Apply basic filter to genes
-    raw_mat <- raw_mat[keep, ]
-    names(raw_mat)[names(raw_mat) == "V1"] <- "gene"
-    raw_mat <- as.data.frame(raw_mat)
-    rownames(raw_mat) <- raw_mat$gene
-
-    colnames(raw_mat) <- gsub("\\+", "-", colnames(raw_mat))
-    print("here is the setdiff to match sample names")
-    setdiff(colnames(raw_mat), keep_meta$samples)
-
 
     # If not enough samples left, exit early
     if (nrow(keep_meta) < 3) {
@@ -199,33 +190,47 @@ for (cell.type in cell_types) {
     if (control_grp != "NA") {
         print(control_grp)
         print(experimental_grp)
-        keep_meta <- keep_meta[which(keep_meta[[contrast_var]] %in% c(control_grp, experimental_grp)), ]
+        keep_meta <- keep_meta[which(keep_meta[,contrast_var] %in% c(control_grp, experimental_grp)), ]
 
     }
 
     if (subset_on1 != "NA") {
         print(subset1)
-        keep_meta <- keep_meta[which(keep_meta[[subset_on1]] %in% subset1), ]
+        keep_meta <- keep_meta[which(keep_meta[,subset_on1] %in% subset1), ]
 
     }
 
     if (subset_on2 != "NA") {
         print(subset2)
-        keep_meta <- keep_meta[which(keep_meta[[subset_on2]] %in% subset2), ]
+        keep_meta <- keep_meta[which(keep_meta[,subset_on2] %in% subset2), ]
 
     }
 
-    rownames(keep_meta) <- keep_meta$samples
+    rownames(keep_meta) <- keep_meta[,sample_col]
 
-    stash_genes <- rownames(raw_mat)
-    raw_mat <- raw_mat[,keep_meta$samples]
+    colnames(raw_mat) <- gsub("\\+", "-", colnames(raw_mat))
+    raw_mat <- as.data.frame(raw_mat[-c(1:4),])
+    stash_genes <- raw_mat$V1
+    rownames(raw_mat) <- stash_genes
+    raw_mat <- raw_mat[,keep_meta[,sample_col]]
     raw_mat <- sapply(raw_mat, as.numeric)
     rownames(raw_mat) <- stash_genes
+    
+    # Now we can filter genes since we're done filtering samples
+    # Get rid of metadata rows in pseudobulk matrix now
+
+
+    # keep <- apply(raw_mat, 1, basic_filter) # Apply basic filter to genes - changed to new filter
+    keep <- fancy_filter(raw_mat, keep_meta, sample_col, contrast_var, control_grp, experimental_grp)
+    raw_mat <- raw_mat[keep, ]
+    raw_mat <- as.data.frame(raw_mat)
+    
+    print("here is the setdiff to match sample names")
+    setdiff(colnames(raw_mat), keep_meta[,sample_col])
 
     # Now turn numeric vars back to numeric
-    keep_meta$Age..years. <- as.numeric(keep_meta$Age..years.)
+    keep_meta$`Age (years)` <- as.numeric(keep_meta$`Age (years)`)
     keep_meta$BMI <- as.numeric(keep_meta$BMI)
-
 
     # Subset samples to ones relevant for contrast
     skip <- FALSE
@@ -283,15 +288,61 @@ for (cell.type in cell_types) {
 
 
     # Can write csv to see what samples are being used for this contrast
-    write.csv(keep_meta, paste0(outdir, cell.type, "_", contrast_id, "_meta_for_contrast.csv"))
+    write.csv(keep_meta, paste0(outdir, cell.name, "_", contrast_id, "_meta_for_contrast.csv"))
+
+    # Okay now right before DE we need to handle spaces in colnames and variables
+    colnames(keep_meta) <- gsub("[^[:alnum:]]", ".", colnames(keep_meta))
+
+    # Get rid of spaces in colnames and variables
+    covariates_list_fix <- gsub("[^[:alnum:]]", ".", covariates_list)
+    contrast_var_fix <- gsub("[^[:alnum:]]", ".", contrast_var)
+    correlate_vars_fix <- gsub("[^[:alnum:]]", ".", correlate_vars)
+
+    #Now get rid of any covariates with only one value
+    for (i in covariates_list_fix) {
+        if (length(unique(keep_meta[,i])) < 2) {
+            covariates_list_fix <- covariates_list_fix[covariates_list_fix != i]
+            print(paste("removed co-variate ", i))
+        }
+    }
+
+    for (j in correlate_vars_fix) {
+        if (length(unique(keep_meta[,j])) < 2) {
+            correlate_vars_fix <- correlate_vars_fix[correlate_vars_fix != j]
+            print(paste("removed correlate variable ", j))
+        }
+    }
 
 
     # Create dds object
-    base_design <- paste0("~", paste0(covariates_list, collapse = "+"), "+", contrast_var)
+    base_design <- paste0("~", paste0(covariates_list_fix, collapse = "+"), "+", contrast_var_fix)
     print(base_design)
 
-    dds <- create_dds_obj(raw_mat, keep_meta)
-    design(dds) <- as.formula(base_design)
+    # Stop if not enough samples left for contrast
+    length_coeffs <- length(covariates_list_fix) + length(contrast_var_fix) + 1
+    
+    if (length_coeffs >= nrow(keep_meta)) {
+        er <- "Not enough samples for number of co-variates for initial DESeq"
+        mini_df <- data.frame(celltype = cell.type,
+                          contrast = contrast_id,
+                          n_control_samps = n_control_samps,
+                          n_experimental_samps = n_experimental_samps,
+                          n_samples_total = nrow(keep_meta),
+                          base_formula = base_design,
+                          n_base_DE_feats = "NA",
+                          ruv_formula = "NA",
+                          n_ruv_DE_feats = "NA",
+                          error_message = er
+                         )
+        de_stats <- rbind(de_stats, mini_df)
+        
+        print(er)
+        dev.off()
+        { next }
+    }
+    
+
+    dds <- DESeq2::DESeqDataSetFromMatrix(countData = raw_mat, colData = keep_meta, design = as.formula(base_design))
     dds <- DESeq(dds)
     message("done with initial DESeq")
                                     
@@ -299,18 +350,18 @@ for (cell.type in cell_types) {
     # Do initial DESeq
     skip <- FALSE
     tryCatch({
-        if (is.factor(keep_meta[,contrast_var])) {
+        if (is.factor(keep_meta[,contrast_var_fix])) {
             print("var is factor")
-            contrast_vec <- c(contrast_var, experimental_grp, control_grp)
+            contrast_vec <- c(contrast_var_fix, experimental_grp, control_grp)
         
             # Get results
-            result <- DESeq2::results(dds, contrast = contrast_vec)
+            result <- DESeq2::results(dds, contrast = contrast_vec) #, independentFiltering=FALSE , alpha = fdr, independentFiltering=FALSE
         }
         else {
             print("var is numeric")
 
             # Get results
-            result <- DESeq2::results(dds, name = contrast_var)
+            result <- DESeq2::results(dds, name = contrast_var_fix) #, , alpha = fdr, independentFiltering=FALSE
         }
     }, error = function(e) {
         skip <<- TRUE
@@ -347,7 +398,7 @@ for (cell.type in cell_types) {
     to_save <- to_save[order(to_save$pvalue),]
 
     # Save initial DESeq results
-    write.table(to_save, paste0(outdir, cell.type, "_", contrast_id, "_results_initial_DESeq.tsv"),
+    write.table(to_save, paste0(outdir, cell.name, "_", contrast_id, "_results_initial_DESeq.tsv"),
                sep = "\t", quote = FALSE, row.names = FALSE)
 
     xs <- xs[!is.na(xs$padj),]
@@ -386,17 +437,18 @@ for (cell.type in cell_types) {
         dev.off()
         { next }
     }
-    if (is.factor(keep_meta[,contrast_var])) {
-        contrast_vec <- c(contrast_var, experimental_grp, control_grp)
+    if (is.factor(keep_meta[,contrast_var_fix])) {
+        # contrast_vec <- c(contrast_var_fix, experimental_grp, control_grp)
         skip <- FALSE
         tryCatch({
             celltype_ruvseq <- run_ruvseq(
-            dds,
-            design = base_design,
-            contrast = contrast_vec,
+            raw_mat,
+            result,
+            # design = base_design,
+            # contrast = contrast_vec,
             k = nlatent,
             p.val.thresh = 0.5,
-            method = "ruvg"
+            # method = "ruvg"
         )
         }, error = function(e) {
             skip <<- TRUE
@@ -429,13 +481,14 @@ for (cell.type in cell_types) {
     else {
         skip <- FALSE
         tryCatch({
-            celltype_ruvseq <- run_ruvseq_continuous(
-            dds,
-            design = base_design,
-            name = contrast_var,
+            celltype_ruvseq <- run_ruvseq(
+            raw_mat,
+            result,
+            # design = base_design,
+            # name = contrast_var_fix,
             k = nlatent,
             p.val.thresh = 0.5,
-            method = "ruvg"
+            # method = "ruvg"
         )
         }, error = function(e) {
             skip <<- TRUE
@@ -471,20 +524,18 @@ for (cell.type in cell_types) {
     tmp <- data.frame(celltype_ruvseq[[k]]$W) %>% tibble::rownames_to_column(sample_col)
     tmp <- keep_meta %>% merge(tmp, on = sample_col)
 
-
     # Make corr mat with all known covariates and latent vars
     latent_names <- paste0("W_", 1:nlatent)
-    t_mat <- matrix(nrow = length(correlate_vars), ncol = nlatent)
-    rownames(t_mat) <- correlate_vars
+    t_mat <- matrix(nrow = length(correlate_vars_fix), ncol = nlatent)
+    rownames(t_mat) <- correlate_vars_fix
     colnames(t_mat) <- latent_names
 
-    p_mat <- matrix(nrow = length(correlate_vars), ncol = nlatent)
-    rownames(p_mat) <- correlate_vars
+    p_mat <- matrix(nrow = length(correlate_vars_fix), ncol = nlatent)
+    rownames(p_mat) <- correlate_vars_fix
     colnames(p_mat) <- latent_names
 
     # Run correlations
-    for (v in correlate_vars) {
-          print(v)
+    for (v in correlate_vars_fix) {
           for (x in latent_names) {
               this_form <- as.formula(paste0(x, " ~ ", v))
               stats_out <- lm(this_form, data = tmp, na.action=na.omit)
@@ -499,10 +550,15 @@ for (cell.type in cell_types) {
 
       # Plot correlation matrix
       # Get p-value matrix - bonferroni corrected if we want
-      p.df <- as.data.frame(p_mat)*nrow(p_mat)*ncol(p_mat)
+      # p.df <- as.data.frame(p_mat)*nrow(p_mat)*ncol(p_mat)
+      p.df <- matrix(p.adjust(as.vector(as.matrix(p_mat)), method='bonf'),ncol=nlatent)
+      rownames(p.df) <- correlate_vars_fix
+      colnames(p.df) <- latent_names
+      p.df <- as.data.frame(p.df)
+
 
       # We can save correlations to check
-      write.csv(p.df, paste0(outdir, cell.type, "_", contrast_id, "_test_corr_df.csv"))
+      write.csv(p.df, paste0(outdir, cell.name, "_", contrast_id, "_test_corr_df_bonfadj.csv"))
       
       # Get asteriks matrix based on p-values
       p.labs <- p.df %>% mutate_all(labs.function)
@@ -542,10 +598,10 @@ for (cell.type in cell_types) {
       print(cor.plot.labs)
 
       # Get out which latent vars associated with known co-variates
-      corr_wide <- tibble::rownames_to_column(p.df, "correlate_vars")
+      corr_wide <- tibble::rownames_to_column(p.df, "correlate_vars_fix")
       corr_wide <- setDT(corr_wide)
 
-      corr_long <- reshape2::melt(corr_wide, id.vars = "correlate_vars", measure.vars = latent_names, variable.name = "latent_vars", value.name = "p_adj_bonf")
+      corr_long <- reshape2::melt(corr_wide, id.vars = "correlate_vars_fix", measure.vars = latent_names, variable.name = "latent_vars", value.name = "p_adj_bonf")
       corr_long <- corr_long %>% as.data.frame()
       pval_filt <- corr_long %>% filter(p_adj_bonf < 0.05)
     
@@ -553,10 +609,12 @@ for (cell.type in cell_types) {
       # Let's find best k by minimizing between-sample variance
       # Here Liza found the elbow of the RLE plot by finding the max second derivative
 
+      # First stop if nlatent == 1
       anova_res_all <- data.frame()
-      for (i in 1:length(celltype_ruvseq)) {
-          print(i)
-          this_res <- celltype_ruvseq[[i]]
+      if (nlatent == 1) {
+          best_k <- 1
+          
+          this_res <- celltype_ruvseq[[1]]
           x1 = this_res$normCounts
           this_pheno <- this_res$W %>% tibble::rownames_to_column(sample_col)
           y1 <- log(x1+1)
@@ -576,49 +634,132 @@ for (cell.type in cell_types) {
           anova_summary <- summary(fit)[[1]]
           f_stat <- anova_summary[sample_col, "F value"]
           res_var <- anova_summary["Residuals", "Mean Sq"]
-
           # Store ANOVA results
           Anove_stat_tmp <- data.frame(
-                                  celltype = cell.type,
-                                  contrast = contrast_id,
-                                  donors = nrow(keep_meta),
-                                  k = paste0("k_", i),
-                                  k_num = i,
-                                  # formula = i,
-                                  f_statistic = f_stat,
-                                  residual_variance = res_var
-          )
-        anova_res_all <- rbind(anova_res_all, Anove_stat_tmp)
-        
+                                      celltype = cell.type,
+                                      contrast = contrast_id,
+                                      donors = nrow(keep_meta),
+                                      k = paste0("k_", 1),
+                                      k_num = 1,
+                                      # formula = i,
+                                      f_statistic = f_stat,
+                                      residual_variance = res_var
+              )
+          anova_res_all <- rbind(anova_res_all, Anove_stat_tmp)
       }
 
-      # # We can save this to check if we want
-      # write.csv(anova_res_all, paste0(outdir, cell.type, "_", contrast_id, "_anova_res_all.csv"))
+      else {
+          
+          # # First let's calculate variance for un-normalized - I took this out but may be helpful in certain cases
+          # x1 = raw_mat
+          # this_pheno <- keep_meta
+          # y1 <- log(x1+1)
+          # medi <- apply(y1, 1, median)
+          # rle_mat <- apply(y1, 2, function(x) x - medi)
 
-                         
-      # To find best k
-      diff_df <- anova_res_all[order(anova_res_all$k_num),]
+          # rle_long <- t(rle_mat) %>% as.data.frame()
+          # gene_names <- colnames(rle_long)
+          # rle_long[,sample_col] <- rownames(rle_long)
 
-      # Find by maximizing second derivative
-      f_stat <- diff_df$f_statistic
-      d1 <- diff(f_stat)
-      d1 <- c(NA, d1)
-      d2 <- diff(d1)
-      d2 <- c(d2, NA)
+          # rle_long <- rle_long %>% merge(this_pheno, by = sample_col)
+          # rle_long <- rle_long %>% pivot_longer(cols = gene_names)
 
-      diff_df$d1 <- d1
-      diff_df$d2 <- d2
+          # # ANOVA: RLE ~ sample
+          # aov_form <- as.formula(paste("value ~", sample_col))
+          # fit <- aov(aov_form, data = rle_long)
+          # anova_summary <- summary(fit)[[1]]
+          # f_stat <- anova_summary[sample_col, "F value"]
+          # res_var <- anova_summary["Residuals", "Mean Sq"]
 
-      best_k <- diff_df$k_num[which.max(diff_df$d2)]
+          # # Store ANOVA results
+          # Anove_stat_tmp <- data.frame(
+          #                         celltype = cell.type,
+          #                         contrast = contrast_id,
+          #                         donors = nrow(keep_meta),
+          #                         k = "un-normalized",
+          #                         k_num = 0,
+          #                         # formula = i,
+          #                         f_statistic = f_stat,
+          #                         residual_variance = res_var
+          # )
+          # anova_res_all <- rbind(anova_res_all, Anove_stat_tmp)
 
-      # # We can save this to check if we want
-      # write.csv(diff_df, paste0(outdir, cell.type, "_", contrast_id, "_diff_df.csv"))
+          
+          for (i in 1:nlatent) {
+              this_res <- celltype_ruvseq[[i]]
+              x1 = this_res$normCounts
+              this_pheno <- this_res$W %>% tibble::rownames_to_column(sample_col)
+              y1 <- log(x1+1)
+              medi <- apply(y1, 1, median)
+              rle_mat <- apply(y1, 2, function(x) x - medi)
+    
+              rle_long <- t(rle_mat) %>% as.data.frame()
+              gene_names <- colnames(rle_long)
+              rle_long[,sample_col] <- rownames(rle_long)
+    
+              rle_long <- rle_long %>% merge(this_pheno, by = sample_col)
+              rle_long <- rle_long %>% pivot_longer(cols = gene_names)
+    
+              # ANOVA: RLE ~ sample
+              aov_form <- as.formula(paste("value ~", sample_col))
+              fit <- aov(aov_form, data = rle_long)
+              anova_summary <- summary(fit)[[1]]
+              f_stat <- anova_summary[sample_col, "F value"]
+              res_var <- anova_summary["Residuals", "Mean Sq"]
+    
+              # Store ANOVA results
+              Anove_stat_tmp <- data.frame(
+                                      celltype = cell.type,
+                                      contrast = contrast_id,
+                                      donors = nrow(keep_meta),
+                                      k = paste0("k_", i),
+                                      k_num = i,
+                                      # formula = i,
+                                      f_statistic = f_stat,
+                                      residual_variance = res_var
+              )
+            anova_res_all <- rbind(anova_res_all, Anove_stat_tmp)
+            
+          }
+    
+          # # We can save this to check if we want
+          # write.csv(anova_res_all, paste0(outdir, cell.type, "_", contrast_id, "_anova_res_all.csv"))
+    
+                             
+          # To find best k
+          diff_df <- anova_res_all[order(anova_res_all$k_num),]
+    
+          # Find by maximizing second derivative
+          f_stat <- diff_df$f_statistic
+          d1 <- diff(f_stat)
+          d1 <- c(NA, d1)
+          d2 <- diff(d1)
+          d2 <- c(d2, NA)
+    
+          diff_df$d1 <- d1
+          diff_df$d2 <- d2
+    
+          best_k <- diff_df$k_num[which.max(diff_df$d2)]
+
+                               
+          # # We can save this to check if we want
+          # write.csv(diff_df, paste0(outdir, cell.type, "_", contrast_id, "_diff_df.csv"))
+      }
+
+      
+
 
       message("  - Found new BestK -> ", best_k)
 
 
       # Plot RLE plot
-      k_levels <- paste0("k_", 1:nlatent)
+      if (nlatent == 1) {
+          k_levels <- "k_1" #"un-normalized", 
+      }
+      else {
+          k_levels <- paste0("k_", 1:nlatent) #"un-normalized", 
+      }
+      
       anova_res_all$k <- factor(anova_res_all$k, levels = k_levels)
       gg <- ggplot(anova_res_all, aes(x = k, y = f_statistic, group = 1)) +
             geom_line() +
@@ -651,52 +792,96 @@ for (cell.type in cell_types) {
       print(gg)
 
       # Find disease associated latent vars (Ws)
-      corr_lats <- pval_filt %>% filter(correlate_vars == contrast_var)
+      corr_lats <- pval_filt %>% filter(correlate_vars_fix == contrast_var_fix)
       disease_associated_Ws <- unique(corr_lats$latent_vars)
 
       message("  - association found with disease status: \n    ", paste0(disease_associated_Ws,
                                                 collapse = "|"))
 
       # Final formula!
-      all_ws <- 1:best_k            
-      all_ws <- paste0("W_", all_ws)
-
-      W_terms <- all_ws[!all_ws %in% disease_associated_Ws]
-
-      best_formula <- paste0("~", paste0(c(covariates_list, W_terms), collapse = "+"), "+", contrast_var)
+      if (best_k == 0) {
+          best_formula <- base_design
+      }
+      else {
+          if (nlatent == 1) {
+              all_ws <- 1
+          }
+          else {
+              all_ws <- 1:best_k  
+          }
+          
+          all_ws <- paste0("W_", all_ws)
+          W_terms <- all_ws[!all_ws %in% disease_associated_Ws]
+    
+          best_formula <- paste0("~", paste0(c(covariates_list_fix, W_terms), collapse = "+"), "+", contrast_var_fix)
+          
+      }               
+      
       message("  - Best formula ->  ", best_formula)
               
       # Get best coldata
-      best_ruv <- anova_res_all$formula[which(anova_res_all$k_num == best_k)]
-      best_coldata <- celltype_ruvseq[[best_k]]$W 
-      best_coldata$samples <- rownames(best_coldata)
-      best_coldata <- best_coldata %>% merge(keep_meta, on = sample_col)
-      rownames(best_coldata) <- best_coldata$samples
+      if (best_k == 0) {
+          best_coldata <- keep_meta
+      }
+
+      else {
+          best_ruv <- anova_res_all$formula[which(anova_res_all$k_num == best_k)]
+          best_coldata <- celltype_ruvseq[[best_k]]$W 
+          best_coldata[,sample_col] <- rownames(best_coldata)
+          best_coldata <- best_coldata %>% merge(keep_meta, on = sample_col)
+          
+      }
+                               
+      rownames(best_coldata) <- best_coldata[,sample_col]
+      
 
       # write.csv(best_coldata, paste0(outdir, cell.type, "_", contrast_id, "_best_ruv_coldata.csv"))
 
       # Reorder raw mat colnames
       raw_mat <- raw_mat[,rownames(best_coldata)]
 
-
+      # Stop if not enough samples left for contrast
+      length_coeffs <- length(covariates_list_fix) + length(W_terms) + length(contrast_var_fix) + 1
+      print(paste0("length coeffs: ", length_coeffs))
+      print(paste0("nrow keep_meta: ", nrow(keep_meta)))
+    
+      if (length_coeffs >= nrow(keep_meta)) {
+          er <- "Not enough samples for number of co-variates plus latent vars after RUVseq"
+          mini_df <- data.frame(celltype = cell.type,
+                          contrast = contrast_id,
+                          n_control_samps = n_control_samps,
+                          n_experimental_samps = n_experimental_samps,
+                          n_samples_total = nrow(keep_meta),
+                          base_formula = base_design,
+                          n_base_DE_feats = n_degs_base,
+                          ruv_formula = best_formula,
+                          n_ruv_DE_feats = "NA",
+                          error_message = er
+                         )
+          de_stats <- rbind(de_stats, mini_df)
+        
+          print(er)
+          dev.off()
+          { next }
+      }
       # Create final dds object
-      dds <- create_dds_obj(raw_mat, best_coldata)
+      dds <- DESeq2::DESeqDataSetFromMatrix(countData = raw_mat, colData = best_coldata, design = as.formula(best_formula))
+      dds <- DESeq(dds)
       
 
-      if (is.factor(keep_meta[,contrast_var])) {
+      if (is.factor(keep_meta[,contrast_var_fix])) {
             print("var is factor")
-            contrast_vec <- c(contrast_var, experimental_grp, control_grp)
-            dds <- run_differential(dds, design = best_formula, contrast = contrast_vec)
+            contrast_vec <- c(contrast_var_fix, experimental_grp, control_grp)
         
-            # extract results for the specified FDR threshold
-            result <- dds$res
+            # Get results
+            result <- DESeq2::results(dds, contrast = contrast_vec) #, independentFiltering=FALSE , alpha = fdr, independentFiltering=FALSE
+        
         }
       else {
             print("var is numeric")
 
-            dds <- run_differential_continuous(dds, design = best_formula, name = contrast_var)
+            result <- DESeq2::results(dds, name = contrast_var_fix) #, independentFiltering=FALSE , alpha = fdr, independentFiltering=FALSE
 
-            result <- dds$res
       }
                            
       # Plot final RUVSeq results
@@ -708,7 +893,7 @@ for (cell.type in cell_types) {
       to_save <- to_save[order(to_save$pvalue),]
 
         
-      write.table(to_save, paste0(outdir, cell.type, "_", contrast_id, "_results_final_RUVSeq.tsv"),
+      write.table(to_save, paste0(outdir, cell.name, "_", contrast_id, "_results_final_RUVSeq.tsv"),
                    sep = "\t", quote = FALSE, row.names = FALSE)
     
       xs <- xs[!is.na(xs$padj),]
@@ -776,8 +961,8 @@ for (cell.type in cell_types) {
       res_sig <- res[res$padj < FDR_tresh,]
 
       # Save fGSEA results
-      fwrite(res, file=paste0(outdir, cell.type, "_", contrast_id, "_fGSEA_res_all.tsv"), sep="\t", sep2=c("", " ", ""), quote = FALSE)
-      fwrite(res_sig, file=paste0(outdir, cell.type, "_", contrast_id, "_fGSEA_res_signif.tsv"), sep="\t", sep2=c("", " ", ""), quote = FALSE)
+      fwrite(res, file=paste0(outdir, cell.name, "_", contrast_id, "_fGSEA_res_all.tsv"), sep="\t", sep2=c("", " ", ""), quote = FALSE)
+      fwrite(res_sig, file=paste0(outdir, cell.name, "_", contrast_id, "_fGSEA_res_signif.tsv"), sep="\t", sep2=c("", " ", ""), quote = FALSE)
 
       # Plot top fGSEA results
       fgsea_res_ord <- res_sig[order(res_sig$NES, decreasing = TRUE),]

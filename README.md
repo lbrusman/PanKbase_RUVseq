@@ -5,13 +5,14 @@ Here are some additional details about the analysis, which was performed on a pe
 
 ## The most recent version (v2) of the code found [here](src/2_run_DE/v2) runs my updated RUVseq differential expression pipeline.
 ## Change log for v2:
-- Updated the R script to pull pseudobulk matrices directly from the PanKbase Data Library. This drastically improves speed and now the pipeline no longer requires Seurat or the .rds object to run.
+- Updated the RUVseq R script to pull pseudobulk matrices directly from the [PanKbase Data Library](https://data.pankbase.org) so that the pipeline no longer requires Seurat or the .rds object to run. This improves runtime and decreases memory requirements.
 - Updated the bash and R scripts to pull donor- and biosample-level metadata directly from the PanKbase Data Library.
-    - Link to Data Library [Donor Metadata](https://data.pankbase.org/tabular-files/PKBFI3142YFIU/) used here.
-    - Link to Data Library [Biosample Metadata](https://data.pankbase.org/tabular-files/PKBFI5333IJJK/) used here.
+    - Link to Data Library [Donor Metadata](https://data.pankbase.org/tabular-files/PKBFI3142YFIU/) used.
+    - Link to Data Library [Biosample Metadata](https://data.pankbase.org/tabular-files/PKBFI5333IJJK/) used.
 - Created new script [make_sc_metadata.R](src/1_make_inputs/make_sc_metadata.R) to pull chemistry metadata and get cell counts from the single cell object.
-    - This uses the single cell object as a **local** file.
+    - This uses the single cell object as a **local** file. If you need to download the .rds object, you can get it [here](https://zenodo.org/records/15596314).
 - Updated the method to filter the genes using a new `fancy_filter()` function.
+- Got rid of redundant code and optimized more resource-intensive steps. This *drastically* improves runtime (from ~45 mins/contrast to ~12 mins/contrast).
 - Updated the method used to optimize the number of latent variables (k). Briefly, the new method works as follows:
     - Find background non-DE genes by running an initial DESeq2 with variable of interest and co-variates. Background genes are genes with uncorrected p-value > 0.5
     - Use RUVg to normalize count data separately for every 1:max_k.

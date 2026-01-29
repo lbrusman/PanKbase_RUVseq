@@ -338,28 +338,12 @@ for (cell.type in cell_types) {
         { next }
     }
     
-
-    dds <- DESeq2::DESeqDataSetFromMatrix(countData = raw_mat, colData = keep_meta, design = as.formula(base_design))
-    dds <- DESeq(dds)
-    message("done with initial DESeq")
-                                    
-
-    # Do initial DESeq
     skip <- FALSE
     tryCatch({
-        if (is.factor(keep_meta[,contrast_var_fix])) {
-            print("var is factor")
-            contrast_vec <- c(contrast_var_fix, experimental_grp, control_grp)
-        
-            # Get results
-            result <- DESeq2::results(dds, contrast = contrast_vec)
-        }
-        else {
-            print("var is numeric")
-
-            # Get results
-            result <- DESeq2::results(dds, name = contrast_var_fix)
-        }
+        # Do initial DESeq
+        dds <- DESeq2::DESeqDataSetFromMatrix(countData = raw_mat, colData = keep_meta, design = as.formula(base_design))
+        dds <- DESeq(dds)
+        message("done with initial DESeq")
     }, error = function(e) {
         skip <<- TRUE
 
@@ -380,10 +364,26 @@ for (cell.type in cell_types) {
                          )
         de_stats <- rbind(de_stats, mini_df)
         
-        print("Initial DESeq failed on this cell type")
+        print(er)
         dev.off()
         { next }
     }
+                                    
+    # Get out DESeq results
+    if (is.factor(keep_meta[,contrast_var_fix])) {
+        print("var is factor")
+        contrast_vec <- c(contrast_var_fix, experimental_grp, control_grp)
+    
+        # Get results
+        result <- DESeq2::results(dds, contrast = contrast_vec)
+    }
+    else {
+        print("var is numeric")
+
+        # Get results
+        result <- DESeq2::results(dds, name = contrast_var_fix)
+    }
+
 
     # Plot initial DESeq results
     xs <- data.frame(result)
@@ -853,11 +853,41 @@ for (cell.type in cell_types) {
           dev.off()
           { next }
       }
-      # Create final dds object
-      dds <- DESeq2::DESeqDataSetFromMatrix(countData = raw_mat, colData = best_coldata, design = as.formula(best_formula))
-      dds <- DESeq(dds)
-      
 
+      skip <- FALSE
+      tryCatch({
+          # Create final dds object
+          dds <- DESeq2::DESeqDataSetFromMatrix(countData = raw_mat, colData = best_coldata, design = as.formula(best_formula))
+          dds <- DESeq(dds)
+          
+          message("done with final DESeq (after RUVseq)")
+      }, error = function(e) {
+          skip <<- TRUE
+
+          er <<- paste("Final DESeq (after RUVseq) failed with message:", e$message)
+      })
+
+      if (skip) {
+          mini_df <- data.frame(celltype = cell.type,
+                                contrast = contrast_id,
+                                n_control_samps = n_control_samps,
+                                n_experimental_samps = n_experimental_samps,
+                                n_samples_total = nrow(keep_meta),
+                                base_formula = base_design,
+                                n_base_DE_feats = n_degs_base,
+                                ruv_formula = best_formula,
+                                n_ruv_DE_feats = "NA",
+                                error_message = er
+                               )
+        de_stats <- rbind(de_stats, mini_df)
+        
+        print(er)
+        dev.off()
+        { next }
+    }
+      
+      
+      # Now get final results
       if (is.factor(keep_meta[,contrast_var_fix])) {
             print("var is factor")
             contrast_vec <- c(contrast_var_fix, experimental_grp, control_grp)

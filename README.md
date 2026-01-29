@@ -29,7 +29,7 @@ Here are some additional details about the analysis, which was performed on a pe
 - I have included an [environment.yml](environment.yml) file. You can re-create my environment with:
     `conda env create -f environment.yml`
 
-## Here is how I ran the contrasts that I have run so for v2.
+## Here is how I ran the contrasts that I have run so for v2. Code for this version of the pipeline can be found [here](src/2_run_DE/v2).
 
 ### General filtering
 Donors were filtered based on the following criteria:
@@ -53,7 +53,7 @@ Reasons pipeline could fail/exit early:
 4. RUVseq failed (error message is returned)
 
 ### Contrast-specific parameters
-All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/v2/pankbase_new_contrasts.csv). So far I have only used this pipeline on Type 1 Diabetes and Age (to test a categorical and continuous variable).
+All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/v2/pankbase_new_contrasts.csv). So far I have only used this pipeline on T1D and Age (to test a categorical and continuous variable).
 - Control Without Diabetes vs. Type 1 Diabetes (ND_vs_T1D): 
     - Additional donor filtering:
         - None

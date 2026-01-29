@@ -82,7 +82,7 @@ base_url <- "https://pankbase-data-v1.s3.us-west-2.amazonaws.com/processed_data/
 
 
 de_stats <- data.frame() # Create df to hold info about DE in ALL cell types for this contrast
-for (cell.type in "Beta") {
+for (cell.type in cell_types) {
     print(cell.type)
     
     cell.name <- gsub("[^[:alnum:]]", ".", cell.type)

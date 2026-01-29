@@ -134,7 +134,7 @@ Reasons pipeline could fail/exit early:
 
 
 ### Contrast-specific parameters
-All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/pankbase_new_contrasts.csv)
+All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/v1/pankbase_new_contrasts.csv)
 - No diabetes vs. type 1 diabetes (ND_vs_T1D): 
     - Additional donor filtering:
         - None
@@ -232,7 +232,7 @@ All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/pankb
 ### Step 1:
 **Important note:** metadata column names must be free of underscores `("_")`. Please change to periods `(".")` or eliminate if necessary before running this pipeline.
 
-Modify [`pankbase_new_contrasts.csv`](src/2_run_DE/pankbase_new_contrasts.csv) to designate the contrasts you would like to run.
+Modify [`pankbase_new_contrasts.csv`](src/2_run_DE/v1/pankbase_new_contrasts.csv) to designate the contrasts you would like to run.
 Here are descriptions of each column:
 
 - `contrast_id`: what you would like to name the contrast. Generally used as output filename prefix.
@@ -252,13 +252,13 @@ Here are descriptions of each column:
 
 ### Step 2:
 
-Modify [`submit_jobs_RUVseq_with_fGSEA.sh`](src/2_run_DE/submit_jobs_RUVseq_with_fGSEA.sh) to point to files and directories you want. 
+Modify [`submit_jobs_RUVseq_with_fGSEA.sh`](src/2_run_DE/v1/submit_jobs_RUVseq_with_fGSEA.sh) to point to files and directories you want. 
 
 **Note:** `pankbase_new_contrasts.csv` path must be changed at the beginning AND end of the file.
 
 ### Step 3:
 
-Modify [`run_RUVseq_with_fGSEA.sh`](src/2_run_DE/run_RUVseq_with_fGSEA.sh) to point to your conda environment (with DESeq2 and RUVseq installed) and change all the SLURM info to your info.
+Modify [`run_RUVseq_with_fGSEA.sh`](src/2_run_DE/v1/run_RUVseq_with_fGSEA.sh) to point to your conda environment (with DESeq2 and RUVseq installed) and change all the SLURM info to your info.
 
 ### Step 4:
 

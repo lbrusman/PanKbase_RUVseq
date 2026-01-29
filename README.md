@@ -6,10 +6,13 @@ Here are some additional details about the analysis, which was performed on a pe
 ## The most recent version (v2) of the code found [here](src/2_run_DE/v2) runs my updated RUVseq differential expression pipeline.
 ## Change log for v2:
 - Updated the R script to pull pseudobulk matrices directly from the PanKbase Data Library. This drastically improves speed and now the pipeline no longer requires Seurat or the .rds object to run.
-- Updated the R script to pull donor- and biosample-level metadata directly from the PanKbase Data Library.
+- Updated the bash and R scripts to pull donor- and biosample-level metadata directly from the PanKbase Data Library.
     - Link to Data Library [Donor Metadata](https://data.pankbase.org/tabular-files/PKBFI3142YFIU/) used here.
     - Link to Data Library [Biosample Metadata](https://data.pankbase.org/tabular-files/PKBFI5333IJJK/) used here.
-- Updated the method used to optimize the number of latent variables (k). Briefly, the new method to optimize the number of latent variables (k) works as follows:
+- Created new script [make_sc_metadata.R](src/1_make_inputs/make_sc_metadata.R) to pull chemistry metadata and get cell counts from the single cell object.
+    - This uses the single cell object as a **local** file.
+- Updated the method to filter the genes using a new `fancy_filter()` function.
+- Updated the method used to optimize the number of latent variables (k). Briefly, the new method works as follows:
     - Find background non-DE genes by running an initial DESeq2 with variable of interest and co-variates. Background genes are genes with uncorrected p-value > 0.5
     - Use RUVg to normalize count data separately for every 1:max_k.
     - Calculate the relative log expression (RLE) per-sample from the normalized counts returned by RUVseq. More details about how RUVseq normalizes the data can be found [here](https://www.bioconductor.org/packages//release/bioc/vignettes/RUVSeq/inst/doc/RUVSeq.html).
@@ -18,13 +21,98 @@ Here are some additional details about the analysis, which was performed on a pe
     - In this version of the pipeline, I found the elbow of the plot by finding the point with the maximum second derivative (positive change in slope, or when the negative slope flattens out).
     - Remove any 1:best_k latent variables that are correlated with the variable of interest.
     - For final results, re-run DESeq2 with initial co-variates *and* final latent variables.
-- The pipeline now requires a [separate file](src/2_run_DE/v2/sc_object_cellcounts.csv) with the number of cells in each cell type per-sample. This should eventually be added to the Data Library and pulled directly from there.
-- This version does **not** include "chemistry" as a co-variate, but this should be added! Here is how I propose this should be addressed:
-    - We currently do not have all 10x sequencing chemistry in the [Measurement Set metadata](https://data.pankbase.org/multireport/?type=MeasurementSet&assay_term.term_name=single-cell+RNA+sequencing+assay&sort=sequencing_chemistry). First, we should all the chemistry info here.
-    - Then create a new Measurement Set metadata file that can be downloaded from PanKbase. 
-    - Update code to pull this info directly from the Then we can add this in to the beginning of the pipeline and 
+- The pipeline now requires two new input files.
+    - [chemistry_metadata.csv](src/2_run_DE/v2/metadata_files/chemistry_metadata.csv) contains the 10x chemistry used for each sample.
+    - [sc_object_cellcounts.csv](src/2_run_DE/v2/metadata_files/sc_object_cellcounts.csv) contains the number of cells in each cell type per-sample.
+    - These should eventually be added to the Data Library and pulled directly from there.
+- The parameter input .csv [pankbase_new_contrasts.csv](src/2_run_DE/v2/pankbase_new_contrasts.csv) has slightly different columns.
+- I have included an [environment.yml](environment.yml) file. You can re-create my environment with:
+    `conda env create -f environment.yml`
+
+## Here is how I ran the contrasts that I have run so for v2. Code for this version of the pipeline can be found [here](src/2_run_DE/v2).
+
+### General filtering
+Donors were filtered based on the following criteria:
+1. Must have $\geq$ 20 cells in that cell type
+2. Sample must not be treated with any reagents (`treatment == "no_treatment"`)
+
+Genes were filtered based on the following criteria (`fancy_filter()` method):
+1. Filter based on expression per-donor:
+    - If the contrast variable is *categorical*, the gene must have $\geq$ 5 counts in at least half of the samples in the control group and/or half of the samples in experimental group.
+    - If the contrast variable is *continuous*, the gene must have $\geq$ 5 counts in at least half of all samples.
+
+For a cell type/contrast to be attempted: 
+1. There must be $\geq$ 3 donors total left after filtering
+2. If contrast variable is categorical, there must be $\geq$ 3 samples left in each group after filtering
+3. If the contrast variable is categorical, there must > 1 unique group after filtering
+
+Reasons pipeline could fail/exit early:
+1. Not enough samples after filtering for the number of co-variates
+2. Initial DESeq failed (error message is returned)
+3. max_k = 0
+4. RUVseq failed (error message is returned)
+
+### Contrast-specific parameters
+All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/v2/pankbase_new_contrasts.csv). So far I have only used this pipeline on T1D and Age (to test a categorical and continuous variable).
+- Control Without Diabetes vs. Type 1 Diabetes (ND_vs_T1D): 
+    - Additional donor filtering:
+        - None
+    - Initial DESeq formula:
+        - `~ Age..years. + Gender + BMI + Ethnicities + chemistry + Description.of.diabetes.status`
+- Age (years)
+    - Additional donor filtering:
+        - Control Without Diabetes only
+    - Initial DESeq formula:
+        - `~ Gender + BMI + Ethnicities + chemistry + Age..years.`
+
+## To run this pipeline yourself:
+
+### Step 1:
+**Important note:** metadata column names must be free of underscores `("_")`. Please change to periods `(".")` or eliminate if necessary before running this pipeline.
+
+Modify [`pankbase_new_contrasts.csv`](src/2_run_DE/v2/pankbase_new_contrasts.csv) to designate the contrasts you would like to run.
+Here are descriptions of each column:
+
+- `contrast_id`: what you would like to name the contrast. Generally used as output filename prefix.
+- `contrast_var`: the name of the column you would like to perform the contrast on.
+- `sample_col`: the name of the column with sample names.
+- `control_grp`: if this is a binary contrast, whichever group is your control group (i.e. if expression is higher in control_grp, log2FoldChange will be negative).
+- `experimental_grp`: if this is a binary contrast, whichever group is your experimental group (i.e. if expression is higher in experimetal group, log2FoldChange will be positive).
+- `subset_on1`: would you like to subset data on a variable before running differential expression? Put that column name here.
+- `subset_on2`: would you like to subset data on a second variable before running differential expression? Put that column name here.
+- `subset1`: the groups you would like to *keep* from the column in `subset_on1`. The groups must be underscore-separated.
+- `subset2`: the groups you would like to *keep* from the column in `subset_on2`. The groups must be underscore-separated.
+- `covariates`: names of columns (covariates) you would like to include in the differential expression formula. If more than one, must be underscore-separated.
+- `correlate_vars`: names of columns you would like to correlate with latent variables in a correlation matrix.
+- `scale`: do you want to scale continuous variables? Must be TRUE or FALSE.
+- `cell_types`: cell types you want to perform contrasts on.
+- `file_pattern`: the file ending of all of your pseudobulk matrix files. This should include **everything** other than the cell type.
+
+### Step 2:
+
+Modify [`submit_jobs_RUVseq_with_fGSEA.sh`](src/2_run_DE/v2/submit_jobs_RUVseq_with_fGSEA.sh) to point to files and directories you want. This script now pulls the donor- and biosample-level metadata directly from PanKbase (linked above), so if you want to change these files, this is where it should be done.
+
+**Note:** `pankbase_new_contrasts.csv` path must be changed at the beginning AND end of the file.
+
+### Step 3:
+
+Modify [`run_RUVseq_with_fGSEA.sh`](src/2_run_DE/v2/run_RUVseq_with_fGSEA.sh) to point to your conda environment (can be re-created using provided `environment.yml`) and change all the SLURM info to your info.
+
+### Step 4:
+
+To run the pipeline:
+
+`bash submit_jobs_RUVseq_with_fGSEA.sh`
+
+This will submit a separate job for each contrast (row in your input csv).
+
+
 
 ## Here is how I ran the contrasts for v1 (results uploaded to PanKbase Data Library Dec 2025). Code for this version of the pipeline can be found [here](src/2_run_DE/v1).
+<details>
+<summary>Details here in drop-down </summary>
+
+
 ### General filtering
 Donors were filtered based on the following criteria:
 1. Must have > 20 cells in that cell type
@@ -139,14 +227,6 @@ All parameters are summarized in [pankbase_new_contrasts.csv](src/2_run_DE/pankb
         - `~ age + sex + bmi + ethnicity + chemistry + hb.a1c`
 
 
-
-## Output files
-- `<celltype>_<contrast_id>_results_initial_DESeq.tsv`: DESeq results from initial DESeq run with known co-variates (prior to RUVseq)
-- `<celltype>_<contrast_id>_results_final_RUVseq.tsv`: DESeq results from final DESeq run, which uses known co-variates *and* latent variables from RUVseq
-- `<celltype>_<contrast_id>_fGSEA_res_all.tsv`: Results from fGSEA for *all* pathways
-- `<celltype>_<contrast_id>_fGSEA_res_signif.tsv`: Results from fGSEA for *significant* pathways (p < 0.1)
-- `<celltype>_<contrast_id>_all_plots.pdf`: Concatenated PDF of all plots generated during analysis. Excludes plots that could not be generated due to pipeline stopping early.
-
 ## To run this pipeline yourself:
 
 ### Step 1:
@@ -187,3 +267,16 @@ To run the pipeline:
 `bash submit_jobs_RUVseq_with_fGSEA.sh`
 
 This will submit a separate job for each contrast (row in your input csv).
+
+</details>
+
+## Output files
+- `<celltype>_<contrast_id>_meta_for_contrast.csv`: Final metadata for samples used in the contrast
+- `<celltype>_<contrast_id>_results_initial_DESeq.tsv`: DESeq results from initial DESeq run with known co-variates (prior to RUVseq)
+- `<celltype>_<contrast_id>_results_final_RUVseq.tsv`: DESeq results from final DESeq run, which uses known co-variates *and* latent variables from RUVseq
+- `<celltype>_<contrast_id>_fGSEA_res_all.tsv`: Results from fGSEA for *all* pathways
+- `<celltype>_<contrast_id>_fGSEA_res_signif.tsv`: Results from fGSEA for *significant* pathways (p < 0.1)
+- `<celltype>_<contrast_id>_all_plots.pdf`: Concatenated PDF of all plots generated during analysis. May be an empty/corrupted pdf if contrast could not be attempted.
+- `All_DE_stats_<contrast_id>.csv`: Stats and info for every the contrast in each cell type (number of samples, number of DE features, error messages, etc.)
+
+

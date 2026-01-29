@@ -34,6 +34,8 @@ counts <- as.data.frame(counts)
 counts_wide <- pivot_wider(counts, names_from = Var1, values_from = Freq)
 names(counts_wide)[names(counts_wide) == "Var2"] <- "samples"
 counts_wide$samples <- as.character(counts_wide$samples)
+counts_wide <- as.data.frame(counts_wide)
+
 
 write.csv(counts_wide, "metadata_files/sc_object_cellcounts.csv", row.names = FALSE)
 

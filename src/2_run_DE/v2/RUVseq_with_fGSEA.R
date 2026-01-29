@@ -217,9 +217,6 @@ for (cell.type in "Beta") {
     rownames(raw_mat) <- stash_genes
     
     # Now we can filter genes since we're done filtering samples
-    # Get rid of metadata rows in pseudobulk matrix now
-
-
     # keep <- apply(raw_mat, 1, basic_filter) # Apply basic filter to genes - changed to new filter
     keep <- fancy_filter(raw_mat, keep_meta, sample_col, contrast_var, control_grp, experimental_grp)
     raw_mat <- raw_mat[keep, ]
@@ -355,13 +352,13 @@ for (cell.type in "Beta") {
             contrast_vec <- c(contrast_var_fix, experimental_grp, control_grp)
         
             # Get results
-            result <- DESeq2::results(dds, contrast = contrast_vec) #, independentFiltering=FALSE , alpha = fdr, independentFiltering=FALSE
+            result <- DESeq2::results(dds, contrast = contrast_vec)
         }
         else {
             print("var is numeric")
 
             # Get results
-            result <- DESeq2::results(dds, name = contrast_var_fix) #, , alpha = fdr, independentFiltering=FALSE
+            result <- DESeq2::results(dds, name = contrast_var_fix)
         }
     }, error = function(e) {
         skip <<- TRUE
@@ -438,17 +435,13 @@ for (cell.type in "Beta") {
         { next }
     }
     if (is.factor(keep_meta[,contrast_var_fix])) {
-        # contrast_vec <- c(contrast_var_fix, experimental_grp, control_grp)
         skip <- FALSE
         tryCatch({
             celltype_ruvseq <- run_ruvseq(
             raw_mat,
             result,
-            # design = base_design,
-            # contrast = contrast_vec,
             k = nlatent,
             p.val.thresh = 0.5,
-            # method = "ruvg"
         )
         }, error = function(e) {
             skip <<- TRUE
@@ -484,11 +477,8 @@ for (cell.type in "Beta") {
             celltype_ruvseq <- run_ruvseq(
             raw_mat,
             result,
-            # design = base_design,
-            # name = contrast_var_fix,
             k = nlatent,
             p.val.thresh = 0.5,
-            # method = "ruvg"
         )
         }, error = function(e) {
             skip <<- TRUE
@@ -550,17 +540,16 @@ for (cell.type in "Beta") {
 
       # Plot correlation matrix
       # Get p-value matrix - bonferroni corrected if we want
-      # p.df <- as.data.frame(p_mat)*nrow(p_mat)*ncol(p_mat)
       p.df <- matrix(p.adjust(as.vector(as.matrix(p_mat)), method='bonf'),ncol=nlatent)
       rownames(p.df) <- correlate_vars_fix
       colnames(p.df) <- latent_names
       p.df <- as.data.frame(p.df)
 
 
-      # We can save correlations to check
-      write.csv(p.df, paste0(outdir, cell.name, "_", contrast_id, "_test_corr_df_bonfadj.csv"))
+    #   # We can save correlations to check
+    #   write.csv(p.df, paste0(outdir, cell.name, "_", contrast_id, "_test_corr_df_bonfadj.csv"))
       
-      # Get asteriks matrix based on p-values
+      # Get asterisks matrix based on p-values
       p.labs <- p.df %>% mutate_all(labs.function)
       
       # Reshaping asterisks matrix to match ggcorrplot data output

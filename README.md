@@ -279,5 +279,16 @@ This will submit a separate job for each contrast (row in your input csv).
 - `<celltype>_<contrast_id>_fGSEA_res_signif.tsv`: Results from fGSEA for *significant* pathways (p < 0.1)
 - `<celltype>_<contrast_id>_all_plots.pdf`: Concatenated PDF of all plots generated during analysis. May be an empty/corrupted pdf if contrast could not be attempted.
 - `All_DE_stats_<contrast_id>.csv`: Stats and info for every the contrast in each cell type (number of samples, number of DE features, error messages, etc.)
+- **If you want to save the best RUV-normalized counts:** There is code to do this in [RUVseq_with_fGSEA.R](https://github.com/lbrusman/PanKbase_RUVseq/blob/main/src/2_run_DE/v2/RUVseq_with_fGSEA.R). It is currently commented out, but it's this part:
+
+```
+# To save best norm counts
+norm_cts <- celltype_ruvseq[[best_k]]$normCounts
+fname <- paste0(outdir, cell.type, "_", contrast_id, "_RUV_norm_cts.tsv")
+write.table(norm_cts, fname, sep = "\t", quote = FALSE, row.names = TRUE)
+```
+
+## If you need to re-generate the pseudobulk matrices or the chemistry/cell count metadata from the single cell object
+- Re-run code in [src/1_make_inputs](src/1_make_inputs).
 
 

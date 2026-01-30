@@ -818,6 +818,11 @@ for (cell.type in cell_types) {
           best_coldata <- celltype_ruvseq[[best_k]]$W 
           best_coldata[,sample_col] <- rownames(best_coldata)
           best_coldata <- best_coldata %>% merge(keep_meta, on = sample_col)
+
+          # # To save best RUV-normalized counts
+          # norm_cts <- celltype_ruvseq[[best_k]]$normCounts
+          # fname <- paste0(outdir, cell.type, "_", contrast_id, "_RUV_norm_cts.tsv")
+          # write.table(norm_cts, fname, sep = "\t", quote = FALSE, row.names = TRUE)
           
       }
                                

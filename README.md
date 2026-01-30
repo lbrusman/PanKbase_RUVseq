@@ -282,7 +282,7 @@ This will submit a separate job for each contrast (row in your input csv).
 - **If you want to save the best RUV-normalized counts:** There is code to do this in [RUVseq_with_fGSEA.R](https://github.com/lbrusman/PanKbase_RUVseq/blob/main/src/2_run_DE/v2/RUVseq_with_fGSEA.R). It is currently commented out, but it's this part:
 
 ```
-# To save best norm counts
+# To save best RUV-normalized counts
 norm_cts <- celltype_ruvseq[[best_k]]$normCounts
 fname <- paste0(outdir, cell.type, "_", contrast_id, "_RUV_norm_cts.tsv")
 write.table(norm_cts, fname, sep = "\t", quote = FALSE, row.names = TRUE)

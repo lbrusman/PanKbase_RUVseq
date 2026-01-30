@@ -28,9 +28,9 @@ Here are some additional details about the analysis, which was performed on a pe
     - These should eventually be added to the Data Library and pulled directly from there.
 - The parameter input .csv [pankbase_new_contrasts.csv](src/2_run_DE/v2/pankbase_new_contrasts.csv) has slightly different columns.
 - I have included an [environment.yml](environment.yml) file. You can re-create my environment with:
-    `conda env create -f environment.yml`
+    `conda env create -f environment.yml`. It may be missing some R packages - if you get an error about a package loading, make sure to check/install!
 
-## Here is how I ran the contrasts that I have run so for v2. Code for this version of the pipeline can be found [here](src/2_run_DE/v2).
+## Here is how I ran the contrasts that I have run so far using v2. Code for this version of the pipeline can be found [here](src/2_run_DE/v2).
 
 ### General filtering
 Donors were filtered based on the following criteria:
